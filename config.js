@@ -1,6 +1,6 @@
 module.exports = {
     catalogUrl: null,
-    catalogTitle: "STAC Browser",
+    catalogTitle: "NCCF Product CatalogSTAC Browser",
     catalogImage: null,
     allowExternalAccess: true, // Must be true if catalogUrl is not given
     allowedDomains: [],
@@ -51,37 +51,7 @@ module.exports = {
     requestHeaders: {},
     requestQueryParameters: {},
     socialSharing: ['email', 'bsky', 'mastodon', 'x'],
-    preprocessSTAC: (stac, state) => {
-        const API_GATEWAY_PATTERN = /https?:\/\/[^/]+\.execute-api\.[^/]+/i;
-        const PROXY_BASE = 'https://data-dev.nesdis.noaa.gov/stac/api';
-        
-        if (stac && Array.isArray(stac.links)) {
-            stac.links = stac.links.map(link => {
-                if (link.href && API_GATEWAY_PATTERN.test(link.href)) {
-                    try {
-                        const url = new URL(link.href);
-                        const path = url.pathname;
-                        const search = url.search;
-                        const hash = url.hash;
-                        
-                        // Ensure path starts with /stac/api
-                        const normalizedPath = path.startsWith('/stac/api') 
-                            ? path 
-                            : `/stac/api${path.startsWith('/') ? path : '/' + path}`;
-                        
-                        // Reconstruct URL with proxy domain
-                        link.href = `${PROXY_BASE}${normalizedPath}${search}${hash}`;
-                    } catch (e) {
-                        // If URL parsing fails, skip this link
-                        console.warn('Failed to rewrite URL:', link.href, e);
-                    }
-                }
-                return link;
-            });
-        }
-        
-        return stac;
-    },
+    preprocessSTAC: null,
     authConfig: null,
     crs: {}
 };
