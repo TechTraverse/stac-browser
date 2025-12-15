@@ -49,7 +49,7 @@ jobs:
             DYNAMIC_CONFIG=true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.SHORT_SHA }}
-            ${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:nccf-stac-browser-latest
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:nccf-stac-browser-latest
+            ${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:latest
           cache-to: type=inline
 
