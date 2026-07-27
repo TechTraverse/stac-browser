@@ -1,7 +1,7 @@
 import ErrorAlert from '../components/ErrorAlert.vue';
 import Loading from '../components/Loading.vue';
 import { getErrorCode, getErrorMessage } from '../store/utils';
-import URI from 'urijs';
+import { URI } from 'stac-js/src/utils.js';
 import { mapState, mapGetters } from 'vuex';
 
 export default {
@@ -39,8 +39,14 @@ export default {
           return;
         }
 
-        let url = this.fromBrowserPath(path || '/');
-        this.$store.dispatch("load", { url, show: true });
+        // This has to run after the created() method in StacBrowser.vue.
+        // Thus we have to wait here for the router to be ready so that
+        // we can ensure parseQuery in StacBrowser.vue has been called
+        // and the query parameters for the request are set in the store.
+        // https://github.com/radiantearth/stac-browser/issues/822#issuecomment-4068820575
+        await this.$router.isReady();
+        const url = this.fromBrowserPath(path || '/');
+        await this.$store.dispatch('load', { url, show: true });
       }
     }
   }

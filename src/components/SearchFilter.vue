@@ -8,21 +8,43 @@
 
         <b-form-group v-if="canFilterFreeText" class="filter-freetext" :label="$t('search.freeText')" :label-for="ids.q" :description="$t('search.freeTextDescription')">
           <multiselect
-            :id="ids.q" :value="query.q" @input="setSearchTerms"
-            multiple taggable :options="query.ids"
+            :id="ids.q"
+            v-model="query.q"
+            multiple taggable
+            :options="query.q"
             :placeholder="$t('search.enterSearchTerms')"
-            :tagPlaceholder="$t('search.addSearchTerm')"
-            :noOptions="$t('search.addSearchTerm')"
+            :tag-placeholder="$t('search.addSearchTerm')"
+            :no-options="$t('search.addSearchTerm')"
             @tag="addSearchTerm"
           >
             <template #noOptions>{{ $t('search.noOptions') }}</template>
           </multiselect>
         </b-form-group>
 
-        <b-form-group v-if="canFilterExtents" class="filter-datetime" :label="$t('search.temporalExtent')" :label-for="ids.datetime" :description="$t('search.dateDescription')">
-          <date-picker
-            range type="datetime" v-model="datetime" input-class="form-control mx-input"
-            :id="ids.datetime" :lang="datepickerLang" :format="dateTimeFormat"
+        <b-form-group v-if="canFilterExtents" class="filter-datetime" :label="$t('search.temporalExtent')" :label-for="ids.datetime" :description="isSingleDateExtent ? $t('search.disabledDueToSingleDate') : $t('search.dateDescription')">
+          <VueDatePicker
+            input-class="form-control mx-input"
+            :id="ids.datetime" 
+            v-model="datetime"
+            :locale="datepickerLang"
+            :formats="{ input: dateTimeFormat }"
+            :week-start="weekStartDay"
+            :close-on-scroll="false"
+            :placeholder="$t('search.selectDateRange')"
+            :time-config="{ 
+              enableTimePicker: true, 
+              seconds: true,
+              timePickerInline: true 
+            }"
+            :input-attrs="{ clearable: true }"
+            :min-date="temporalExtent?.[0]"
+            :max-date="temporalExtent?.[1]"
+            :start-date="temporalExtent?.[1]"
+            :prevent-min-max-navigation="Boolean(temporalExtent)"
+            auto-apply
+            range
+            :multi-calendars="2"
+            :disabled="isSingleDateExtent"
           />
         </b-form-group>
 
@@ -31,10 +53,11 @@
           <MapSelect class="mb-4" v-if="provideBBox" v-model="query.bbox" :stac="stac" />
         </b-form-group>
 
-        <b-form-group v-if="conformances.CollectionIdFilter" class="filter-collection" :label="$tc('stacCollection', collections.length)" :label-for="ids.collections">
+        <b-form-group v-if="conformances.CollectionIdFilter" class="filter-collection" :label="$t('stacCollection', collections.length)" :label-for="ids.collections">
           <multiselect
+            :id="ids.collections"
+            v-model="selectedCollections"
             v-bind="collectionSelectOptions"
-            @input="setCollections"
             @tag="addCollection"
             @search-change="searchCollections"
           >
@@ -51,11 +74,13 @@
 
         <b-form-group v-if="conformances.ItemIdFilter" class="filter-item-id" :label="$t('search.itemIds')" :label-for="ids.ids">
           <multiselect
-            :id="ids.ids" :value="query.ids" @input="setIds"
-            multiple taggable :options="query.ids"
+            :id="ids.ids"
+            v-model="query.ids"
+            multiple taggable
+            :options="query.ids"
             :placeholder="$t('search.enterItemIds')"
-            :tagPlaceholder="$t('search.addItemIds')"
-            :noOptions="$t('search.addItemIds')"
+            :tag-placeholder="$t('search.addItemIds')"
+            :no-options="$t('search.addItemIds')"
             @tag="addId"
           >
             <template #noOptions>{{ $t('search.noOptions') }}</template>
@@ -64,20 +89,22 @@
 
         <b-form-group v-if="showAdditionalFilters" class="additional-filters" :label="$t('search.additionalFilters')">
           <b-form-radio-group v-model="filtersAndOr" :options="andOrOptions" name="logical" size="sm" />
+          <b-form-checkbox v-model="filtersNegate" size="sm">{{ $t('search.logical.not') }}</b-form-checkbox>
 
-          <b-dropdown size="sm" :text="$t('search.addFilter')" block variant="primary" class="queryables mt-2 mb-3" menu-class="w-100">
-            <template v-for="queryable in sortedQueryables">
-              <b-dropdown-item v-if="queryable.supported" :key="queryable.id" @click="additionalFieldSelected(queryable)" link-class="d-flex justify-content-between align-items-center">
+          <b-dropdown size="sm" :text="$t('search.addFilter')" variant="primary" class="queryables mt-2 mb-3" menu-class="w-100" toggle-class="w-100">
+            <template v-for="queryable in sortedQueryables" :key="queryable.id">
+              <b-dropdown-item v-if="queryable.supported" @click="additionalFieldSelected(queryable)" link-class="d-flex justify-content-between align-items-center">
                 <span>{{ queryable.title }}</span>
-                <b-badge variant="dark" class="ml-2">{{ queryable.id }}</b-badge>
+                <b-badge variant="dark" class="ms-2">{{ queryable.id }}</b-badge>
               </b-dropdown-item>
             </template>
           </b-dropdown>
 
           <QueryableInput
             v-for="(filter, index) in filters" :key="filter.id"
-            :value.sync="filter.value"
-            :operator.sync="filter.operator"
+            v-model:value="filter.value"
+            v-model:operator="filter.operator"
+            v-model:negate="filter.negate"
             :queryable="filter.queryable"
             :index="index"
             :cql="cql"
@@ -89,59 +116,73 @@
 
         <b-form-group v-if="canSort" class="sort" :label="$t('sort.title')" :label-for="ids.sort" :description="$t('search.notFullySupported')">
           <multiselect
-            :id="ids.sort" :value="sortTerm" @input="sortFieldSet"
-            :options="sortOptions" track-by="value" label="text"
+            :id="ids.sort"
+            v-model="sortTerm"
+            :options="sortOptions"
+            track-by="value"
+            label="text"
             :placeholder="$t('default')"
-            :selectLabel="$t('multiselect.selectLabel')"
-            :selectedLabel="$t('multiselect.selectedLabel')"
-            :deselectLabel="$t('multiselect.deselectLabel')"
+            :allow-empty="false"
+            :show-labels="false"
           >
             <template #option="{option}">
               <span class="d-flex justify-content-between align-items-center">
                 <span>{{ option.text }}</span>
-                <b-badge v-if="option.value" variant="dark" class="ml-2">{{ option.value }}</b-badge>
+                <b-badge v-if="option.value" variant="dark" class="ms-2">{{ option.value }}</b-badge>
               </span>
             </template>
           </multiselect>
-          <SortButtons v-if="sortTerm && sortTerm.value" class="mt-1" :value="sortOrder" enforce @input="sortDirectionSet" />
+          <SortButtons v-if="sortTerm && sortTerm.value" class="mt-1" v-model="sortOrder" :enforce="true" />
         </b-form-group>
 
         <b-form-group class="limit" :label="$t('search.itemsPerPage')" :label-for="ids.limit" :description="$t('search.itemsPerPageDescription', {maxItems})">
           <b-form-input
-            :id="ids.limit" :value="query.limit" @change="setLimit" min="1"
+            :id="ids.limit" :model-value="query.limit" @update:model-value="setLimit" min="1"
             :max="maxItems" type="number"
             :placeholder="limitPlaceholder"
           />
         </b-form-group>
       </b-card-body>
-      <b-card-footer>
+      <b-card-footer class="d-flex gap-3">
         <b-button type="submit" variant="primary">{{ $t('submit') }}</b-button>
-        <b-button type="reset" variant="danger" class="ml-3">{{ $t('reset') }}</b-button>
+        <b-button type="reset" variant="danger">{{ $t('reset') }}</b-button>
+        <b-button v-if="canShowExampleCode" type="button" variant="secondary" @click="showCodeModal = true">{{ $t('exampleCode.title') }}</b-button>
       </b-card-footer>
     </b-card>
+    <b-modal v-if="canShowExampleCode" v-model="showCodeModal" :title="$t('exampleCode.title')" size="xl">
+      <SearchCode
+        v-if="showCodeModal"
+        :searchLinks="codeExampleSearchLinks"
+        :filters="codeExampleQuery"
+      />
+      <template #footer="{ close }">
+        <b-button variant="secondary" @click="close()">{{ $t('close') }}</b-button>
+      </template>
+    </b-modal>
   </b-form>
 </template>
 
 <script>
-import { BBadge, BDropdown, BDropdownItem, BForm, BFormGroup, BFormInput, BFormCheckbox, BFormRadioGroup } from 'bootstrap-vue';
-import Multiselect from 'vue-multiselect';
+import { defineComponent, defineAsyncComponent } from 'vue';
 import { mapGetters, mapState } from "vuex";
+import { BCard, BCardBody, BCardFooter, BCardTitle, BDropdown, BDropdownItem, BModal } from 'bootstrap-vue-next';
+
 import refParser from '@apidevtools/json-schema-ref-parser';
 
-import Utils, { schemaMediaType } from '../utils';
-import { ogcQueryables } from "../rels";
+import Utils from '../utils';
+import { hasText, isObject } from 'stac-js/src/utils.js';
 
 import ApiCapabilitiesMixin, { TYPES } from './ApiCapabilitiesMixin';
 import DatePickerMixin from './DatePickerMixin';
 import Loading from './Loading.vue';
 
-import { CatalogLike, STAC } from 'stac-js';
-import { createSTAC } from '../models/stac'; 
+import { CollectionCollection, STAC } from 'stac-js'; 
+import { createSTAC } from '../models/stac';
 import Cql from '../models/cql2/cql';
 import Queryable from '../models/cql2/queryable';
-import CqlValue from '../models/cql2/value';
-import CqlLogicalOperator from '../models/cql2/operators/logical';
-import { stacRequest } from '../store/utils';
+import CqlLogicalOperator, { CqlNot } from '../models/cql2/operators/logical';
+import { formatKey } from '@radiantearth/stac-fields/helper';
+
 
 function getQueryDefaults() {
   return {
@@ -165,6 +206,7 @@ function getDefaults() {
     bbox: null,
     query: getQueryDefaults(),
     filtersAndOr: 'and',
+    filtersNegate: false,
     filters: [],
     selectedCollections: []
   };
@@ -172,22 +214,22 @@ function getDefaults() {
 
 let formId = 0;
 
-export default {
+export default defineComponent({
   name: 'SearchFilter',
   components: {
-    BBadge,
+    Loading,
+    BCard,
+    BCardBody,
+    BCardFooter,
+    BCardTitle,
     BDropdown,
     BDropdownItem,
-    BForm,
-    BFormGroup,
-    BFormInput,
-    BFormCheckbox,
-    BFormRadioGroup,
-    QueryableInput: () => import('./QueryableInput.vue'),
-    Loading,
-    MapSelect: () => import('./maps/MapSelect.vue'),
-    SortButtons: () => import('./SortButtons.vue'),
-    Multiselect
+    BModal,
+    SearchCode: defineAsyncComponent(() => import('./SearchCode.vue')),
+    QueryableInput: defineAsyncComponent(() => import('./QueryableInput.vue')),
+    MapSelect: defineAsyncComponent(() => import('./maps/MapSelect.vue')),
+    SortButtons: defineAsyncComponent(() => import('./SortButtons.vue')),
+    Multiselect: defineAsyncComponent(() => import('vue-multiselect')),
   },
   mixins: [
     ApiCapabilitiesMixin,
@@ -209,28 +251,34 @@ export default {
     value: {
       type: Object,
       default: () => ({})
+    },
+    searchLink: {
+      type: Object,
+      default: null
     }
   },
+  emits: ['input'],
   data() {
     return Object.assign({
       results: null,
       loaded: false,
       queryables: null,
+      sortables: null,
       hasAllCollections: false,
       collections: [],
       collectionsLoadingTimer: null,
-      additionalCollectionCount: 0
+      additionalCollectionCount: 0,
+      showCodeModal: false
     }, getDefaults());
   },
   computed: {
-    ...mapState(['searchResultsPerPage', 'maxEntriesPerPage', 'uiLanguage']),
-    ...mapGetters(['canSearchCollections', 'supportsConformance']),
+    ...mapState(['defaultCollectionSort', 'defaultItemSort', 'searchResultsPerPage', 'maxEntriesPerPage', 'uiLanguage']),
+    ...mapGetters(['canSearchCollections', 'getApiChildren', 'supportsConformance']),
     collectionSelectOptions() {
       let taggable = !this.hasAllCollections;
       let isResult = this.collections.length > 0 && !this.hasAllCollections;
       return {
         id: this.ids.collections,
-        value: this.selectedCollections,
         multiple: true,
         taggable,
         options: this.collections, // query.collections
@@ -248,7 +296,44 @@ export default {
       };
     },
     collectionSearchLink() {
-      return this.parent instanceof CatalogLike && this.parent.getApiCollectionsLink();
+      return this.parent?.isCatalogLike && this.parent.getApiCollectionsLink();
+    },
+    codeExampleSearchLinks() {
+      const toMethodMap = (link) => {
+        if (!link) {
+          return {};
+        }
+        return { [(link.method || 'GET').toUpperCase()]: link };
+      };
+      if (this.type === 'Collections') {
+        return toMethodMap(this.collectionSearchLink);
+      }
+      // For search endpoints, check if both GET and POST are available
+      if (this.searchLink?.rel === 'search' && this.parent?.getSearchLink) {
+        const get = this.parent.getSearchLink('GET');
+        const post = this.parent.getSearchLink('POST');
+        if (get || post) {
+          const links = {};
+          if (get) {
+            links.GET = get;
+          }
+          if (post) {
+            links.POST = post;
+          }
+          return links;
+        }
+      }
+      return toMethodMap(this.searchLink);
+    },
+    canShowExampleCode() {
+      return Object.keys(this.codeExampleSearchLinks).length > 0;
+    },
+    codeExampleQuery() {
+      return {
+        ...this.query,
+        sortby: this.formatSort(),
+        filters: this.buildFilter()
+      };
     },
     canSearchCollectionsFreeText() {
       return this.canSearchCollections && this.supportsConformance(TYPES.Collections.FreeText);
@@ -275,8 +360,14 @@ export default {
       return this.cql && Array.isArray(this.queryables) && this.queryables.length > 0;
     },
     sortOptions() {
-      // todo: this should use queryables when available
-      // nevertheless, let's try to provide some reasonable defaults
+      // Use sortables from API if available
+      if (Array.isArray(this.sortables) && this.sortables.length > 0) {
+        return [
+          { text: this.$t('default'), value: null },
+          ...this.sortables
+        ];
+      }
+      // Fallback: provide reasonable defaults when sortables are not available
       const criteria = [
         { text: this.$t('default'), value: null },
         { text: this.$t('fields.Identifier'), value: 'id' },
@@ -313,20 +404,49 @@ export default {
       set(val) {
         this.query.datetime = Array.isArray(val) ? val.map(d => Utils.dateToUTC(d)) : null;
       }
+    },
+    temporalExtent() {
+      if (this.stac && typeof this.stac.getTemporalExtent === 'function') {
+        const extent = this.stac.getTemporalExtent();
+        if (Array.isArray(extent)) {
+          const [min, max] = extent;
+          if (min instanceof Date || max instanceof Date) {
+            return [min instanceof Date ? min : undefined, max instanceof Date ? max : undefined];
+          }
+        }
+      }
+      return null;
+    },
+    isSingleDateExtent() {
+      const [min, max] = this.temporalExtent || [];
+      return min instanceof Date && max instanceof Date && min.getTime() === max.getTime();
+    },
+    apiCollectionsState() {
+      return this.getApiChildren(this.parent);
+    },
+    apiCollectionsFromStore() {
+      const list = this.apiCollectionsState?.list;
+      if (!Array.isArray(list)) {
+        return [];
+      }
+      return list.filter(collection => collection instanceof STAC && collection.isCollection);
+    },
+    apiCollectionsPaginated() {
+      return Boolean(this.apiCollectionsState?.next || this.apiCollectionsState?.prev);
     }
   },
   watch: {
     parent: {
       immediate: true,
-      handler(newStac, oldStac) {
-        if (newStac instanceof STAC) {
-          newStac.setApiDataListener('searchfilter' + formId, () => this.updateApiCollections());
-        }
-        if (oldStac instanceof STAC) {
-          oldStac.setApiDataListener('searchfilter' + formId);
-        }
+      handler() {
         this.updateApiCollections();
       }
+    },
+    apiCollectionsFromStore() {
+      this.updateApiCollections();
+    },
+    apiCollectionsPaginated() {
+      this.updateApiCollections();
     },
     value: {
       immediate: true,
@@ -354,6 +474,12 @@ export default {
         }
       }
     },
+    selectedCollections: {
+      deep: 1,
+      handler(collections) {
+        this.query.collections = collections.map(c => c.value);
+      }
+    },
     provideBBox(shown) {
       if (!shown) {
         this.query.bbox = null;
@@ -361,6 +487,12 @@ export default {
       else {
         this.query.bbox = this.bbox;
       }
+    },
+    sortTerm() {
+      this.query.sortby = this.formatSort();
+    },
+    sortOrder() {
+      this.query.sortby = this.formatSort();
     }
   },
   beforeCreate() {
@@ -368,27 +500,44 @@ export default {
   },
   created() {
     let promises = [];
-    if (this.cql && this.stac && this.type !== 'Collections') {
-      let queryableLink = this.findQueryableLink(this.stac.links);
-      promises.push(
-        this.loadQueryables(queryableLink)
-          .catch(error => console.error(error))
-      );
+    if (this.stac && this.type !== 'Collections') {
+      if (this.cql) {
+        const queryableLink = this.stac.getQueryablesLink();
+        promises.push(
+          this.loadQueryables(queryableLink)
+            .catch(error => console.error(error))
+        );
+      }
+      if (this.canSort) {
+        const sortableLink = this.stac.getSortablesLink();
+        promises.push(
+          this.loadSortables(sortableLink)
+            .catch(error => console.error(error))
+        );
+      }
     }
     if ((this.type === 'Collections' || this.conformances.CollectionIdFilter) && this.stac) {
       promises.push(
         this.loadCollections(this.stac.getApiCollectionsLink())
-          .then(({collections, queryableLink}) => {
+          .then(({collections, queryableLink, sortableLink}) => {
             this.collections = collections;
             if (this.collections.length > 0) {
               this.hasAllCollections = true;
             }
-            return this.loadQueryables(queryableLink);
+            let subPromises = [];
+            subPromises.push(this.loadQueryables(queryableLink));
+            if (this.canSort) {
+              subPromises.push(this.loadSortables(sortableLink));
+            }
+            return Promise.all(subPromises);
           })
           .catch(error => console.error(error))
       );
     }
-    Promise.all(promises).finally(() => this.loaded = true);
+    Promise.all(promises).finally(() => {
+      this.resetSort();
+      this.loaded = true;
+    });
   },
   methods: {
     resetSearchCollection() {
@@ -408,13 +557,15 @@ export default {
       this.collectionsLoadingTimer = setTimeout(async () => {
         try {
           const link = Utils.addFiltersToLink(this.collectionSearchLink, {q: [text]});
-          const response = await stacRequest(this.$store, link);
+          const response = await this.$store.dispatch('request', { link });
+          
           // Only set collections if response is valid AND collectionsLoadingTimer has not been reset.
           // If collectionsLoadingTimer has been reset, the result is not relevant anylonger.
-          if (this.collectionsLoadingTimer && Utils.isObject(response.data) && Array.isArray(response.data.collections)) {
-            this.collections = this.prepareCollections(response.data.collections);
-            if (typeof response.data.numberMatched === 'number') {
-              this.additionalCollectionCount = response.data.numberMatched - this.collections.length;
+          if (this.collectionsLoadingTimer && CollectionCollection.isResponse(response.data)) {
+            const stac = createSTAC(response.data, null, this.$store);
+            this.collections = this.prepareCollections(stac.getAll());
+            if (typeof stac.numberMatched === 'number') {
+              this.additionalCollectionCount = stac.numberMatched - this.collections.length;
             }
           }
         } catch (error) {
@@ -426,33 +577,33 @@ export default {
       }, 250);
     },
     async loadCollections(link) {
-      let hasMore = false;
-      let data = {
+      const data = {
         collections: [],
-        queryableLink: null
+        queryableLink: null,
+        sortableLink: null
       };
 
       if (this.type === 'Global' && this.collections) {
         data.collections = this.collections;
-        hasMore = false;
       }
       else if (this.type === 'Global' || this.type === 'Collections') {
-        let response = await stacRequest(this.$store, link);
-        if (!Utils.isObject(response.data)) {
+        let response = await this.$store.dispatch('request', { link });
+        
+        if (!isObject(response.data)) {
           return {};
         }
 
-        if (Array.isArray(response.data.links)) {
-          let links = response.data.links;
-          hasMore = Boolean(Utils.getLinkWithRel(links, 'next'));
-          data.queryableLink = this.findQueryableLink(links) || null;
+        const stac = createSTAC(response.data, null, this.$store);
+        if (typeof stac.getQueryablesLink === 'function') {
+          data.queryableLink = stac.getQueryablesLink();
+        }
+        if (typeof stac.getSortablesLink === 'function') {
+          data.sortableLink = stac.getSortablesLink();
         }
 
-        // todo: use ItemCollection / CollectionCollection
-        if (!hasMore && Array.isArray(response.data.collections)) {
-          let collections = response.data.collections
-            .map(collection => createSTAC(collection));
-          data.collections = this.prepareCollections(collections);
+        const paginationLinks = stac.getPaginationLinks();
+        if (!paginationLinks.next && stac instanceof CollectionCollection) {
+          data.collections = this.prepareCollections(stac.getAll());
         }
       }
       return data;
@@ -461,9 +612,8 @@ export default {
       if (!this.parent) {
         return;
       }
-      let apiCollections = this.parent.getChildren('collections');
-      let nextCollectionsLink = this.parent._apiChildren.next;
-      if (!Array.isArray(apiCollections) || nextCollectionsLink || !this.conformances.CollectionIdFilter) {
+      let apiCollections = this.apiCollectionsFromStore;
+      if (!Array.isArray(apiCollections) || this.apiCollectionsPaginated || !this.conformances.CollectionIdFilter) {
         this.collections = [];
         return;
       }
@@ -484,19 +634,9 @@ export default {
         .map(this.collectionToMultiSelect)
         .sort((a,b) => collator.compare(a.text, b.text));
     },
-    findQueryableLink(links) {
-      return Utils.getLinksWithRels(links, ogcQueryables)
-          .find(link => Utils.isMediaType(link.type, schemaMediaType, true));
-    },
-    async loadQueryables(link) {
-      this.queryables = [];
-
-      if (!Utils.isObject(link)) {
-        return;
-      }
-
-      let response = await stacRequest(this.$store, link);
-      if (!Utils.isObject(response.data)) {
+    async loadSchemas(link) {
+      let response = await this.$store.dispatch('request', { link });
+      if (!isObject(response.data)) {
         return;
       }
 
@@ -509,47 +649,81 @@ export default {
         schemas = response.data;
       }
 
-      if (Utils.isObject(schemas) && Utils.isObject(schemas.properties)) {
-        this.queryables = Object.entries(schemas.properties)
-          .map(([key, schema]) => new Queryable(key, schema));
+      if (isObject(schemas) && isObject(schemas.properties)) {
+        return Object.entries(schemas.properties);
       }
+      return [];
     },
-    sortFieldSet(value) {
-      this.sortTerm = value;
+    async loadQueryables(link) {
+      if (!isObject(link)) {
+        return;
+      }
+      this.queryables = [];
+      const queryables = await this.loadSchemas(link);
+      this.queryables = queryables
+        .map(([key, schema]) => new Queryable(key, schema));
     },
-    sortDirectionSet(value) {
-      this.sortOrder = value;
+    async loadSortables(link) {
+      if (!isObject(link)) {
+        return;
+      }
+      this.sortables = [];
+      const sortables = await this.loadSchemas(link);
+      const collator = new Intl.Collator(this.uiLanguage);
+      this.sortables = sortables
+        .map(([key, schema]) => ({
+          value: key,
+          text: schema.title || formatKey(key)
+        }))
+        .sort((a, b) => collator.compare(a.text, b.text));
     },
     buildFilter() {
       if (this.filters.length === 0) {
         return null;
       }
-      const args = this.filters.map(f => new f.operator(f.queryable, f.value));
-      const logical = CqlLogicalOperator.create(this.filtersAndOr, args);
-      return new Cql(logical);
+      const args = this.filters.map(f => {
+        let filter = new f.operator(f.queryable, f.value);
+        if (f.negate) {
+          filter = new CqlNot(filter);
+        }
+        return filter;
+      });
+      let logical = CqlLogicalOperator.create(this.filtersAndOr, args);
+      if (this.filtersNegate) {
+        logical = new CqlNot(logical);
+      }
+      return new Cql(logical, this.cql);
     },
     removeQueryable(queryableIndex) {
       this.filters.splice(queryableIndex, 1);
     },
     additionalFieldSelected(queryable) {
       const operators = queryable.getOperators(this.cql);
+      if (operators.length === 0) {
+        this.$store.commit('showGlobalError', {
+          message: this.$t('search.noOperatorsError', {queryable: queryable.id})
+        });
+        return;
+      }
+      const operator = operators[0];
       this.filters.push({
-        value: CqlValue.create(queryable.defaultValue),
-        operator: operators[0],
-        queryable
+        id: `${queryable.id}-${Date.now()}-${Math.random()}`, // Unique ID
+        value: operator.getDefaultValue(queryable),
+        operator,
+        queryable,
+        negate: false
       });
     },
     onSubmit() {
-      if (this.canSort && this.sortTerm && this.sortOrder) {
-        this.$set(this.query, 'sortby', this.formatSort());
-      }
+      this.query.sortby = this.formatSort();
       let filters = this.buildFilter();
-      this.$set(this.query, 'filters', filters);
+      this.query.filters = filters;
       this.$emit('input', this.query, false);
     },
-    async onReset() {
+    onReset() {
       Object.assign(this, getDefaults());
-      this.$emit('input', {}, true);
+      this.resetSort();
+      this.$emit('input', this.query, true);
     },
     setLimit(limit) {
       limit = Number.parseInt(limit, 10);
@@ -559,16 +733,13 @@ export default {
       else if (typeof limit !== 'number' || isNaN(limit) || limit < 1) {
         limit = null;
       }
-      this.$set(this.query, 'limit', limit);
+      this.query.limit = limit;
     },
     addSearchTerm(term) {
-      if (!Utils.hasText(term)) {
+      if (!hasText(term)) {
         return;
       }
       this.query.q.push(term);
-    },
-    setSearchTerms(terms) {
-      this.$set(this.query, 'q', terms);
     },
     addCollection(collection) {
       if (!this.collectionSelectOptions.taggable) {
@@ -580,37 +751,38 @@ export default {
       this.collections.push(opt);
       this.query.collections.push(collection);
     },
-    setCollections(collections) {
-      this.selectedCollections = collections;
-      this.$set(this.query, 'collections', collections.map(c => c.value));
-    },
     addId(id) {
       this.query.ids.push(id);
     },
-    setIds(ids) {
-      this.$set(this.query, 'ids', ids);
-    },
     formatSort() {
-      if (this.sortTerm && this.sortTerm.value && this.sortOrder) {
+      if (this.canSort && this.sortTerm && this.sortTerm.value && this.sortOrder) {
         let order = this.sortOrder < 0 ? '-' : '';
         return `${order}${this.sortTerm.value}`;
       }
       else {
         return null;
       }
+    },
+    resetSort() {
+      if (!this.canSort) {
+        return;
+      }
+      const defaults = this.type === 'Collections' ? this.defaultCollectionSort : this.defaultItemSort;
+      const sort = Utils.parseApiSortParameter(defaults);
+      if (sort.field) {
+        const sortOption = this.sortOptions.find(option => option.value === sort.field);
+        if (sortOption) {
+          this.sortTerm = sortOption;
+          this.sortOrder = sort.direction;
+        }
+      }
     }
   }
-};
+});
 </script>
 
 <style lang="scss">
-@import '../theme/variables.scss';
-
-// Datepicker related style
-$default-color: map-get($theme-colors, "secondary");
-$primary-color: map-get($theme-colors, "primary");
-
-@import '~vue2-datepicker/scss/index.scss';
+@import '../theme/datepicker.scss';
 
 .queryables .dropdown-menu {
   max-height: 90vh;
@@ -620,18 +792,20 @@ $primary-color: map-get($theme-colors, "primary");
 // General item filter style
 .filter {
   position: relative;
+  min-width: 400px;
 
-  .mx-datepicker {
-    width: 100%;
-  }
+  .b-form-group {
+    padding-left: 1em;
+    margin-bottom: 1em;
 
-  .form-group {
-    > div {
-      margin-left: 1em;
+    > label,
+    > legend {
+      margin-left: -1em;
+      font-weight: 600;
     }
 
-    > label {
-      font-weight: 600;
+    > small {
+      display: block;
     }
   }
 }

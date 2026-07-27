@@ -1,44 +1,51 @@
 <template>
-  <b-container id="stac-browser">
+  <Loading v-if="!browserReady" fill />
+  <b-container v-else id="stac-browser">
+    <WidgetHook id="root-start" />
     <Authentication v-if="showLogin" />
     <ErrorAlert v-if="globalError" dismissible class="global-error" v-bind="globalError" @close="hideError" />
-    <Sidebar v-if="sidebar" />
+    <Sidebar v-if="sidebar !== null" v-model="sidebar" />
     <!-- Header -->
-    <header>
+    <header ref="header" :class="{ scrolled }">
       <b-row class="site">
         <b-col md="12">
           <nav class="actions navigation">
-            <b-button-group v-if="canSearch || isServerSelector">
-              <b-button v-if="isServerSelector" variant="primary" size="sm" :title="$t('browse')" v-b-toggle.sidebar @click="sidebar = true">
+            <b-button-group v-if="canSearch || !isServerSelector">
+              <b-button v-if="!isServerSelector" variant="header" :title="$t('browse')" @click="sidebar = !sidebar">
                 <b-icon-list /><span class="button-label">{{ $t('browse') }}</span>
               </b-button>
-              <b-button v-if="canSearch" variant="primary" size="sm" :to="searchBrowserLink" :title="$t('search.title')" :pressed="isSearchPage">
+              <b-button v-if="canSearch" variant="header" :to="searchBrowserLink" :title="$t('search.title')" :pressed="isSearchPage">
                 <b-icon-search /><span class="button-label">{{ $t('search.title') }}</span>
+              </b-button>
+              <b-button v-if="root" variant="header" id="popover-root-btn" tabindex="0">
+                <b-icon-database /><span class="button-label">{{ serviceType }}</span>
               </b-button>
             </b-button-group>
           </nav>
           <div class="title">
-            <img v-if="logo" :src="logo.getAbsoluteUrl()" :alt="logo.title" :title="logo.title" class="logo">
-            <span role="banner">
-              <StacLink v-if="root" :data="root" hideIcon />
-              <template v-else>{{ catalogTitle }}</template>
-            </span>
-            <b-button
-              v-if="root" size="sm" variant="outline-primary" id="popover-root-btn"
-              :title="serviceType" tag="a" tabindex="0"
-            >
-              <b-icon-caret-down-fill />
-            </b-button>
+            <StacLink v-if="root" :data="root">
+              <HeaderTitle ref="headerTitle" />
+            </StacLink>
+            <HeaderTitle v-else ref="headerTitle" />
           </div>
           <nav class="actions user">
             <b-button-group>
-              <b-button v-if="canAuthenticate" variant="primary" size="sm" @click="logInOut" :title="authTitle">
+              <b-button v-if="canAuthenticate" variant="header" @click="logInOut" :title="authTitle">
                 <component :is="authIcon" /><span class="button-label">{{ authLabel }}</span>
               </b-button>
               <LanguageChooser
+                v-if="supportedLocalesFromVueX.length > 1"
                 :data="data" :currentLocale="localeFromVueX" :locales="supportedLocalesFromVueX"
-                @setLocale="locale => switchLocale({locale, userSelected: true})"
+                @set-locale="locale => switchLocale({locale, userSelected: true})"
               />
+              <b-button
+                v-if="!enforcedColorModeFromVueX || enforcedColorModeFromVueX === 'auto'"
+                variant="header"
+                @click="toggleColorMode"
+              >
+                <b-icon-sun v-if="colorMode === 'light'" :title="$t('switchToDarkMode')" />
+                <b-icon-moon-stars v-else :title="$t('switchToLightMode')" />
+              </b-button>
             </b-button-group>
           </nav>
         </b-col>
@@ -54,103 +61,71 @@
               <b-button v-if="back" :to="selfBrowserLink" :title="$t('goBack.description', {type})" variant="outline-primary" size="sm">
                 <b-icon-arrow-left /><span class="button-label">{{ $t('goBack.label') }}</span>
               </b-button>
-              <b-button v-if="collectionLink" :to="toBrowserPath(collectionLink.href)" :title="collectionLinkTitle" variant="outline-primary" size="sm">
+              <b-button v-if="collectionLink" :to="toBrowserPath(collectionLink)" :title="collectionLinkTitle" variant="outline-primary" size="sm">
                 <b-icon-folder-symlink /><span class="button-label">{{ $t('goToCollection.label') }}</span>
               </b-button>
-              <b-button v-if="parentLink" :to="toBrowserPath(parentLink.href)" :title="parentLinkTitle" variant="outline-primary" size="sm">
+              <b-button v-if="parentLink" :to="toBrowserPath(parentLink)" :title="parentLinkTitle" variant="outline-primary" size="sm">
                 <b-icon-arrow-90deg-up /><span class="button-label">{{ $t('goToParent.label') }}</span>
               </b-button>
             </b-button-group>
           </nav>
-          <Source class="actions" :title="title" :stacUrl="url" :stac="data" />
+          <StacSource class="actions" :title="title" :stacUrl="url" :stac="data" />
         </b-col>
       </b-row>
     </header>
-    <!-- Content (Item / Catalog) -->
+    <!-- Content -->
+    <WidgetHook id="root-before-content" />
     <router-view />
+    <!-- Footer -->
     <footer>
-      <i18n tag="small" path="poweredBy" class="poweredby text-muted">
+      <WidgetHook id="footer-start" />
+      <ul v-if="Array.isArray(footerLinksFromVueX) && footerLinksFromVueX.length > 0" class="footer-links text-body-secondary">
+        <li v-for="link in footerLinksFromVueX" :key="link.url">
+          <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ $te(`footerLinks.${link.label}`) ? $t(`footerLinks.${link.label}`) : link.label }}</a>
+        </li>
+      </ul>
+      <i18n-t tag="small" keypath="poweredBy" class="poweredby text-body-secondary" scope="global">
         <template #link>
-          <a href="https://github.com/radiantearth/stac-browser" target="_blank">STAC Browser</a> {{ browserVersion }}
+          <a href="https://github.com/radiantearth/stac-browser" target="_blank" rel="noopener noreferrer">STAC Browser</a> {{ browserVersion }}
         </template>
-      </i18n>
+      </i18n-t>
     </footer>
     <b-popover
-      v-if="root" id="popover-root" custom-class="popover-large" target="popover-root-btn"
-      triggers="focus" placement="bottom" container="stac-browser"
+      v-if="root" id="popover-root" class="popover-large" target="popover-root-btn"
+      placement="bottom" :title="serviceType" teleport-to="#stac-browser"
+      click focus :boundary-padding="10" strategy="fixed"
     >
-      <template #title>
-        {{ serviceType }}
-      </template>
       <RootStats />
     </b-popover>
+    <WidgetHook id="root-end" />
   </b-container>
 </template>
 
 <script>
-import Vue from "vue";
-import VueRouter from "vue-router";
-import Vuex, { mapMutations, mapActions, mapGetters, mapState } from 'vuex';
-import CONFIG from './config';
-import getRoutes from "./router";
-import getStore from "./store";
+import { defineComponent, defineAsyncComponent } from 'vue';
+import { isNavigationFailure, NavigationFailureType } from 'vue-router';
+import { mapMutations, mapActions, mapGetters, mapState } from 'vuex';
+import { useColorMode } from 'bootstrap-vue-next';
+import CONFIG from './merged-config';
 
-import {
-  AlertPlugin, BadgePlugin, BPopover,
-  BIconArrow90degUp, BIconArrowLeft, BIconCaretDownFill,
-  BIconFolderSymlink, BIconInfoLg, BIconList, BIconLock,
-  BIconSearch, BIconUnlock,
-  ButtonGroupPlugin, ButtonPlugin, CardPlugin, LayoutPlugin, SpinnerPlugin,
-  VBToggle, VBVisible } from "bootstrap-vue";
-import "bootstrap/dist/css/bootstrap.css";
-import "bootstrap-vue/dist/bootstrap-vue.css";
+// Import icons needed for dynamic component usage
+import BIconLock from '~icons/bi/lock';
+import BIconUnlock from '~icons/bi/unlock';
 
 import ErrorAlert from './components/ErrorAlert.vue';
+import HeaderTitle from './components/HeaderTitle.vue';
+import Loading from './components/Loading.vue';
 import StacLink from './components/StacLink.vue';
 
-import { CatalogLike, STAC } from 'stac-js';
+import { STAC } from 'stac-js';
+import { hasText, isObject, size, URI } from 'stac-js/src/utils.js';
 import Utils from './utils';
-import URI from 'urijs';
 
-import { API_LANGUAGE_CONFORMANCE } from './i18n';
+import { API_LANGUAGE_CONFORMANCE, updateExternals } from './i18n';
 import { getBest, prepareSupported } from 'stac-js/src/locales';
 import BrowserStorage from "./browser-store";
 import Authentication from "./components/Authentication.vue";
-import LanguageChooser from "./components/LanguageChooser.vue";
-import { getDisplayTitle } from "./models/stac";
-
-Vue.use(AlertPlugin);
-Vue.use(ButtonGroupPlugin);
-Vue.use(ButtonPlugin);
-Vue.use(BadgePlugin);
-Vue.use(CardPlugin);
-Vue.use(LayoutPlugin);
-Vue.use(SpinnerPlugin);
-
-// For collapsibles / accordions
-Vue.directive('b-toggle', VBToggle);
-// Used to detect when a catalog/item becomes visible so that further data can be loaded
-Vue.directive('b-visible', VBVisible);
-
-// Setup router
-Vue.use(VueRouter);
-const router = new VueRouter({
-  mode: CONFIG.historyMode,
-  base: CONFIG.pathPrefix,
-  routes: getRoutes(CONFIG),
-  scrollBehavior: (to, from, savedPosition) => {
-    if (to.path !== from.path) {
-      return { x: 0, y: 0 };
-    }
-    else {
-      return savedPosition;
-    }
-  }
-});
-
-// Setup store
-Vue.use(Vuex);
-const store = getStore(CONFIG, router);
+import Auth from './auth';
 
 // Pass Config through from props to vuex
 let Props = {};
@@ -161,6 +136,7 @@ for(let key in CONFIG) {
   };
   Watchers[key] = {
     immediate: true,
+    deep: ['object', 'array'].includes(typeof CONFIG[key]),
     handler: async function(newValue) {
       await this.$store.dispatch('config', {
         [key]: newValue
@@ -169,49 +145,49 @@ for(let key in CONFIG) {
   };
 }
 
-export default {
+export default defineComponent({
   name: 'StacBrowser',
-  router,
-  store,
   components: {
     Authentication,
-    BIconArrow90degUp,
-    BIconArrowLeft,
-    BIconCaretDownFill,
-    BIconFolderSymlink,
-    BIconInfoLg,
-    BIconList,
     BIconLock,
-    BIconSearch,
     BIconUnlock,
-    BPopover,
+    BPopover: defineAsyncComponent(() => import('bootstrap-vue-next').then(m => m.BPopover)),
     ErrorAlert,
-    LanguageChooser,
-    RootStats: () => import('./components/RootStats.vue'),
-    Sidebar: () => import('./components/Sidebar.vue'),
+    HeaderTitle,
+    LanguageChooser: defineAsyncComponent(() => import('./components/LanguageChooser.vue')),
+    Loading,
+    RootStats: defineAsyncComponent(() => import('./components/RootStats.vue')),
+    Sidebar: defineAsyncComponent(() => import('./components/Sidebar.vue')),
     StacLink,
-    Source: () => import('./components/Source.vue')
+    StacSource: defineAsyncComponent(() => import('./components/StacSource.vue'))
   },
   props: {
     ...Props
   },
   data() {
     return {
-      sidebar: false,
+      colorMode: null,
+      sidebar: null,
       error: null,
-      onDataLoaded: null
+      onDataLoaded: null,
+      isNavigatingLocale: false,
+      scrolled: false,
+      scrollListener: null
     };
   },
   computed: {
-    ...mapState(['allowSelectCatalog', 'conformsTo', 'data', 'dataLanguage', 'globalError', 'loading', 'stateQueryParameters', 'uiLanguage', 'url']),
+    ...mapState(['allowSelectCatalog', 'browserReady', 'conformsTo', 'data', 'dataLanguage', 'downloads', 'globalError', 'loading', 'stateQueryParameters', 'url']),
     ...mapState({
-      catalogImageFromVueX: 'catalogImage',
+      footerLinksFromVueX: 'footerLinks',
       localeFromVueX: 'locale',
+      fallbackLocaleFromVueX: 'fallbackLocale',
       detectLocaleFromBrowserFromVueX: 'detectLocaleFromBrowser',
       supportedLocalesFromVueX: 'supportedLocales',
-      storeLocaleFromVueX: 'storeLocale'
+      storeLocaleFromVueX: 'storeLocale',
+      enforcedColorModeFromVueX: 'enforcedColorMode',
+      colorModeFromVueX: 'colorMode'
     }),
-    ...mapGetters(['canSearch', 'collectionLink', 'description', 'fromBrowserPath', 'isExternalUrl', 'isRoot', 'parentLink', 'root', 'rootLink', 'supportsConformance', 'title', 'toBrowserPath']),
+    ...mapGetters(['canSearch', 'collectionLink', 'fromBrowserPath', 'isExternalUrl', 'isRoot', 'parentLink', 'root', 'searchBrowserLink', 'supportsConformance', 'title', 'toBrowserPath']),
     ...mapGetters('auth', { authMethod: 'method' }),
     ...mapGetters('auth', ['canAuthenticate', 'isLoggedIn', 'showLogin']),
     browserVersion() {
@@ -226,32 +202,16 @@ export default {
       return this.$route.name === 'search';
     },
     isServerSelector() {
-      return this.$route.name !== 'select';
+      return this.$route.name === 'select';
     },
     authIcon() {
-      return this.isLoggedIn ? 'b-icon-unlock' : 'b-icon-lock';
+      return this.isLoggedIn ? BIconUnlock : BIconLock;
     },
     authTitle() {
       return this.authMethod.getButtonTitle();
     },
     authLabel() {
       return this.isLoggedIn ? this.authMethod.getLogoutLabel() : this.authMethod.getLoginLabel();
-    },
-    searchBrowserLink() {
-      if (!this.canSearch) {
-        return null;
-      }
-      let searchLink;
-      if (this.data instanceof CatalogLike && !this.data.equals(this.root)) {
-        searchLink = this.data.getSearchLink();
-      }
-      if (searchLink) {
-        return `/search${this.data.getBrowserPath()}`;
-      }
-      else if (this.root && this.allowSelectCatalog) {
-        return `/search${this.root.getBrowserPath()}`;
-      }
-      return '/search';
     },
     isApi() {
       // todo: This gives false results for a statically hosted OGC API - Records, which may include conformance classes
@@ -268,23 +228,23 @@ export default {
     },
     type() {
       if (this.data instanceof STAC) {
-        if (this.data.isItem()) {
-          return this.$tc('stacItem');
+        if (this.data.isItem) {
+          return this.$t('stacItem', 1);
         }
-        else if (this.data.isCollection()) {
-          return this.$tc(`stacCollection`);
+        else if (this.data.isCollection) {
+          return this.$t(`stacCollection`, 1);
         }
-        else if (this.data.isCatalog()) {
-          return this.$tc(`stacCatalog`);
+        else if (this.data.isCatalog) {
+          return this.$t(`stacCatalog`, 1);
         }
-        else if (Utils.hasText(this.data.type)) {
+        else if (hasText(this.data.type)) {
           return this.data.type;
         }
       }
       return null;
     },
     collectionLinkTitle() {
-      if (this.collectionLink && Utils.hasText(this.collectionLink.title)) {
+      if (this.collectionLink && hasText(this.collectionLink.title)) {
         return this.$t('goToCollection.descriptionWithTitle', this.collectionLink);
       }
       else {
@@ -292,7 +252,7 @@ export default {
       }
     },
     parentLinkTitle() {
-      if (this.parentLink && Utils.hasText(this.parentLink.title)) {
+      if (this.parentLink && hasText(this.parentLink.title)) {
         return this.$t('goToParent.descriptionWithTitle', this.parentLink);
       }
       else {
@@ -300,51 +260,11 @@ export default {
       }
     },
     icon() {
-      return this.getIcon(this.data);
-    },
-    logo() {
-      if (this.catalogImageFromVueX) {
-        return Utils.createLink(this.catalogImageFromVueX, 'icon', this.rootLink?.title);
-      }
-      else {
-        return this.getIcon(this.root);
-      }
+      return Utils.getIcon(this.data);
     }
   },
   watch: {
     ...Watchers,
-    title(title) {
-      if (this.root) {
-        const rootTitle = getDisplayTitle(this.root);
-        if (rootTitle !== title) {
-          title += ` - ${rootTitle}`;
-        }
-      }
-      document.title = title;
-      document.getElementById('og-title').setAttribute("content", title);
-    },
-    description(description) {
-      const summary = Utils.summarizeMd(description, 200);
-      document.getElementById('meta-description').setAttribute("content", summary);
-      document.getElementById('og-description').setAttribute("content", summary);
-    },
-    uiLanguage: {
-      immediate: true,
-      async handler(locale) {
-        if (!locale) {
-          return;
-        }
-
-        // Set the locale for vue-i18n
-        this.$root.$i18n.locale = locale;
-
-        // Update the HTML lang tag
-        document.documentElement.setAttribute("lang", locale);
-        document.getElementById('og-locale').setAttribute("content", locale);
-
-        this.$root.$emit('uiLanguageChanged', locale);
-      }
-    },
     dataLanguage: {
       immediate: true,
       async handler(locale) {
@@ -352,20 +272,31 @@ export default {
           return;
         }
         if (this.data instanceof STAC) {
-          let link = this.data.getLocaleLink(locale);
+          const link = this.data.getLocaleLink(locale);
           if (link) {
-            let state = Object.assign({}, this.stateQueryParameters);
-            this.$router.push(this.toBrowserPath(link.href));
+            const state = Object.assign({}, this.stateQueryParameters);
+            this.isNavigatingLocale = true;
+            try {
+              await this.$router.push(this.toBrowserPath(link));
+            }
+            catch (error) {
+              if (!isNavigationFailure(error, NavigationFailureType.duplicated)) {
+                throw error;
+              }
+            }
+            finally {
+              this.isNavigatingLocale = false;
+            }
             this.$store.commit('state', state);
           }
           else if (this.supportsConformance(API_LANGUAGE_CONFORMANCE)) {
             // this.url gets reset with resetCatalog so store the url for use in load
-            let url = this.url;
+            const url = this.url;
             // Todo: Resetting the catalogs is not ideal. 
             // A better way would be to combine the language code and URL as the index in the browser database
             // This needs a database refactor though: https://github.com/radiantearth/stac-browser/issues/231
             this.$store.commit('resetCatalog', true);
-            await this.$store.dispatch("load", { url, show: true });
+            await this.$store.dispatch('load', { url, show: true });
           }
         }
       }
@@ -373,26 +304,19 @@ export default {
     stateQueryParameters: {
       deep: true,
       handler() {
+        if (this.isNavigatingLocale) {
+          return;
+        }
         let query = {};
         for (const [key, value] of Object.entries(this.$route.query)) {
           if (!key.startsWith('.')) {
             query[key] = value;
           }
         }
-        for (const [key, value] of Object.entries(this.stateQueryParameters)) {
-          let name = `.${key}`;
-          if (Array.isArray(value)) {
-            if (value.length > 0) {
-              query[name] = value.join(',');
-            }
-          }
-          else if (value !== null) {
-              query[name] = value;
-          }
-        }
+        query = Utils.stateQueryParametersToObject(this.stateQueryParameters, query);
 
         this.$router.replace({ query }).catch(error => {
-          if (!VueRouter.isNavigationFailure(error, VueRouter.NavigationFailureType.duplicated)) {
+          if (!isNavigationFailure(error, NavigationFailureType.duplicated)) {
             throw Error(error);
           }
         });
@@ -401,25 +325,26 @@ export default {
     root(root, oldRoot) {
       const canChange = [
         'apiCatalogPriority',
-        'authConfig', // except for the 'formatter', which can't be encoded in JSON
         'cardViewMode',
-        'cardViewSort',
         'crossOriginMedia',
+        'defaultCollectionSort',
+        'defaultItemSort',
         'defaultThumbnailSize',
         'displayGeoTiffByDefault',
+        'preferredAssets',
         'showThumbnailsAsAssets'
       ];
 
-      let doReset = !root || (oldRoot && Utils.isObject(oldRoot['stac_browser']));
-      let doSet = root && Utils.isObject(root['stac_browser']);
+      let doReset = !root || (oldRoot && isObject(oldRoot.stac_browser));
+      let doSet = root && isObject(root.stac_browser);
 
       for(let key of canChange) {
         let value;
         if (doReset) {
           value = CONFIG[key]; // Original value
         }
-        if (doSet && typeof root['stac_browser'][key] !== 'undefined') {
-          value = root['stac_browser'][key]; // Custom value from root
+        if (doSet && typeof root.stac_browser[key] !== 'undefined') {
+          value = root.stac_browser[key]; // Custom value from root
         }
 
         // Update config in store
@@ -436,13 +361,44 @@ export default {
       if (data instanceof STAC) {
         this.onDataLoaded();
       }
+    },
+    enforcedColorModeFromVueX: {
+      immediate: true,
+      handler(value) {
+        if (value && value !== 'auto') {
+          this.colorMode = value;
+        }
+      }
+    },
+    colorModeFromVueX(value) {
+      if (value && value !== this.colorMode) {
+        this.colorMode = value;
+      }
+    },
+    colorMode(value) {
+      this.$store.commit('setColorMode', value);
+    },
+    scrollListener(newValue, oldValue) {
+      if (newValue) {
+        window.addEventListener('scroll', newValue, { passive: true });
+        // Initialize once, e.g. when the page is loaded already scrolled down.
+        newValue();
+      }
+      else {
+        window.removeEventListener('scroll', oldValue);
+      }
     }
   },
   async created() {
-    this.$router.onReady(() => {
-      this.detectLocale();
-      this.parseQuery(this.$route);
+    this.colorMode = useColorMode({
+      selector: 'body',
+      initialValue: this.enforcedColorModeFromVueX
     });
+
+    await updateExternals(this.localeFromVueX, this.fallbackLocaleFromVueX);
+    await this.$router.isReady();
+    await this.detectLocale();
+    await this.parseQuery(this.$route);
 
     this.$router.afterEach((to, from) => {
       if (to.path === from.path) {
@@ -465,40 +421,60 @@ export default {
       this.$store.commit(resetOp);
       this.parseQuery(to);
 
-      document.getElementById('og-url').setAttribute("content", window.location.href);
+      if (this.$refs.headerTitle) {
+        this.$refs.headerTitle.updateUrl();
+      }
     });
 
-    const storage = new BrowserStorage(true);
-    const authConfig = storage.get('authConfig');
+    const authConfig = Auth.restoreLastMethod();
     if (authConfig) {
-      storage.remove('authConfig');
       await this.$store.dispatch('config', { authConfig });
     }
+
+    this.$store.commit('browserReady');
   },
   mounted() {
-    this.$root.$on('error', this.showError);
     setInterval(() => this.$store.dispatch('loadBackground', 3), 200);
+
+    // Prevent the user from leaving the page while the download is in progress
+    // As this is not a normal download a user has to stay on the page for the download to complete
+    window.addEventListener('unload', () => {
+      Object.values(this.downloads)
+        .filter(stream => stream && typeof stream.abort === 'function')
+        .forEach(stream => stream.abort());
+    });
+    window.addEventListener('beforeunload', (evt) => {
+      if (size(this.downloads) > 0) {
+        evt.preventDefault();
+      }
+    });
+
+    // Add scroll listener to show header shadow only when scrolled (and header is sticky)
+    this.scrollListener = () => {
+      const header = this.$refs.header;
+      const isSticky = header && window.getComputedStyle(header).position === 'sticky';
+      const scrolled = Boolean(isSticky) && window.scrollY > 0;
+      if (scrolled !== this.scrolled) {
+        this.scrolled = scrolled;
+      }
+    };
+  },
+  beforeUnmount() {
+    this.scrollListener = null;
   },
   methods: {
-    ...mapActions(['switchLocale']),
+    ...mapActions(['switchLocale', 'switchDataLocale']),
     ...mapMutations('auth', ['addAction']),
     ...mapActions('auth', ['requestLogin', 'requestLogout']),
-    getIcon(data) {
-      if (data instanceof STAC) {
-        const icons = data.getIcons();
-        if (icons.length > 0) {
-          return icons[0];
-        }
-      }
-      return null;
+    toggleColorMode() {
+      this.colorMode = this.colorMode === 'light' ? 'dark' : 'light';
     },
     async logInOut() {
       if (this.url) {
-        this.addAction(() => this.$store.dispatch("load", {
+        this.addAction(() => this.$store.dispatch('load', {
           url: this.url,
           show: true,
-          force: true,
-          noRetry: true
+          force: true
         }));
       }
       if (this.isLoggedIn) {
@@ -531,7 +507,7 @@ export default {
         if (!this.data) {
           // Thus try switching the (data) language again once the data is loaded.
           this.onDataLoaded = () => {
-            this.switchLocale({locale});
+            this.switchDataLocale({locale});
             this.onDataLoaded = null;
           };
         }
@@ -549,14 +525,14 @@ export default {
         let value = query[key];
         // Store all private query parameters (start with ~) and replace them in the shown URI
         if (key.startsWith('~')) {
-          params.private = Utils.isObject(params.private) ? params.private : {};
+          params.private = isObject(params.private) ? params.private : {};
           params.private[key.substr(1)] = value;
           delete query[key];
         }
         // Store all state related parameters (start with .)
         else if (key.startsWith('.')) {
           let realKey = key.substr(1);
-          params.state = Utils.isObject(params.state) ? params.state : {};
+          params.state = isObject(params.state) ? params.state : {};
           if (Array.isArray(this.stateQueryParameters[realKey]) && !Array.isArray(value)) {
             value = value.split(',');
           }
@@ -564,13 +540,13 @@ export default {
         }
         // All other parameters should be appended to the main STAC requests
         else {
-          if (!Utils.isObject(params.localRequest)) {
+          if (!isObject(params.localRequest)) {
             params.localRequest = {};
           }
           params.localRequest[key] = value;
         }
       }
-      if (Utils.size(params) > 0) {
+      if (size(params) > 0) {
         for (let type in params) {
           for (let key in params[type]) {
             this.$store.commit('setQueryParameter', {type, key, value: params[type][key]});
@@ -580,7 +556,7 @@ export default {
       if (params?.state?.language) {
         this.switchLocale({locale: params.state.language});
       }
-      if (Utils.size(params.private) > 0) {
+      if (size(params.private) > 0) {
         this.$router.replace({ query });
       }
 
@@ -595,13 +571,13 @@ export default {
       this.$store.commit('showGlobalError', null);
     }
   }
-};
+});
 </script>
 
 <style lang="scss">
 @import "./theme/variables.scss";
-@import '~bootstrap/scss/bootstrap.scss';
-@import '~bootstrap-vue/src/index.scss';
+@import 'bootstrap/scss/bootstrap';
+@import 'bootstrap-vue-next/dist/bootstrap-vue-next.css';
 @import "./theme/page.scss";
 @import "./theme/custom.scss";
 </style>
