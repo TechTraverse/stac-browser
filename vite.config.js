@@ -105,7 +105,8 @@ export default defineConfig(async ({ mode }) => {
     : env;
 
   return ({
-    base: dynamicConfig ? "./" : config.pathPrefix,
+    //base: dynamicConfig ? "./" : config.pathPrefix,
+    base: config.pathPrefix,
     build: {
       sourcemap: mode !== "minimal",
       rollupOptions: {
