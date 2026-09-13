@@ -103,6 +103,7 @@ export default {
   displayGeoTiffByDefault: false,
   displayPreview: true,
   displayOverview: true,
+  displayPreviewsForChildren: true,
   displayOverviewsForChildren: false,
   maxDisplayPixels: null,
   buildTileUrlTemplate: null,
