@@ -112,6 +112,7 @@ export default {
   pathPrefix: "/",
   historyMode: "history",
   cardViewMode: "cards",
+  omitTimeForMidnight: false,
   showFavorites: true,
   defaultCollectionSort: "title",
   defaultItemSort: null,
