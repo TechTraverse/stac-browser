@@ -1,11 +1,18 @@
 <template>
   <div class="map-container">
-    <div ref="map" class="map" :id="mapId">
+    <div ref="map" class="map" :id="mapId" tabindex="0" role="region" :aria-label="$t('map')">
       <!-- this will be filled by OpenLayers -->
       <LayerControl :map="map" :maxZoom="maxZoom" />
       <TextControl v-if="empty" :map="map" :text="$t('mapping.nodata')" />
       <TextControl v-else-if="!hasBasemap" :map="map" :text="$t('mapping.nobasemap')" />
+      <div class="focus-hint" :class="{visible: focusHint}">{{ $t('mapping.focusHint') }}</div>
     </div>
+    <ConfirmModal
+      v-model="showDisplayLimitModal" :title="$t('mapping.displayLimit.title')"
+      :confirmLabel="$t('mapping.displayLimit.showAnyway')" @confirm="showAnyway"
+    >
+      <p>{{ $t('mapping.displayLimit.message') }}</p>
+    </ConfirmModal>
     <div ref="target" class="popover-target" />
     <b-popover
       v-if="popover && selection" show manual placement="auto"
@@ -13,8 +20,8 @@
       :boundary-padding="10"
     >
       <section class="popover-children">
-        <Items v-if="selection.type === 'items'" :stac="stac" :items="selection.children" />
-        <Catalogs v-else-if="selection.type === 'collections'" collectionsOnly enforceCards hideControls :stac="stac" :catalogs="selection.children" />
+        <Items v-if="selection.type === 'items'" :stac="stac" :items="selection.children" showControls enforceView="cards" />
+        <Catalogs v-else-if="selection.type === 'collections'" collectionsOnly enforceView="cards" :stac="stac" :catalogs="selection.children" />
         <Features v-else :features="selection.children" />
       </section>
       <div class="text-center">
@@ -25,7 +32,7 @@
 </template>
 
 <script>
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, toRaw } from 'vue';
 import MapMixin from './maps/MapMixin.js';
 import LayerControl from './maps/LayerControl.vue';
 import TextControl from './maps/TextControl.vue';
@@ -44,6 +51,7 @@ export default {
   name: 'MapView',
   components: {
     BPopover: defineAsyncComponent(() => import('bootstrap-vue-next').then(m => m.BPopover)),
+    ConfirmModal: defineAsyncComponent(() => import('../components/ConfirmModal.vue')),
     Features: defineAsyncComponent(() => import('../components/Features.vue')),
     Catalogs: defineAsyncComponent(() => import('../components/Catalogs.vue')),
     Items: defineAsyncComponent(() => import('../components/Items.vue')),
@@ -53,22 +61,26 @@ export default {
   mixins: [
     MapMixin
   ],
+  provide() {
+    return {
+      layerVisibilityChanged: () => this.$emit('changed', this.getShownData())
+    };
+  },
+  inject: {
+    mapSelection: { default: null }
+  },
   props: {
     stac: {
       type: Object,
       default: null
     },
-    assets: {
+    dataSources: {
       type: Array,
       default: null
     },
     children: {
       type: Object,
       default: null
-    },
-    onfocusOnly: {
-      type: Boolean,
-      default: false
     },
     popover: {
       type: Boolean,
@@ -83,10 +95,12 @@ export default {
       empty: false,
       selector: null,
       mapId: `map-${++mapId}`,
+      displayLimitError: null,
+      focusHint: false,
     };
   },
   computed: {
-    ...mapState(['displayOverviewsForChildren']),
+    ...mapState(['displayPreviewsForChildren', 'displayOverviewsForChildren']),
     container() {
       if (this.isFullScreen) {
         return '#' + this.mapId;
@@ -98,26 +112,49 @@ export default {
     childrenOptions() {
       const showItems = this.children && this.children.isItemCollection;
       return {
-        displayPreview: showItems,
+        displayPreview: showItems && this.displayPreviewsForChildren,
         displayOverview: showItems && this.displayOverviewsForChildren
       };
+    },
+    showDisplayLimitModal: {
+      get() {
+        return this.displayLimitError !== null;
+      },
+      set(value) {
+        // Confirming resets the error before the modal closes
+        if (!value && this.displayLimitError !== null) {
+          this.displayLimitError = null;
+          this.hideRejected();
+        }
+      }
     }
   },
   watch: {
     async stac() {
       await this.showStacLayer();
     },
-    async assets() {
+    async dataSources(dataSources) {
       if (!this.stacLayer) {
         return;
       }
-      await this.stacLayer.setAssets(this.assets);
+      this.displayLimitError = null;
+      await this.stacLayer.setDataSources(dataSources);
     },
     async children() {
       if (!this.stacLayer) {
         return;
       }
-      await this.stacLayer.setAssets(null, false);
+      this.displayLimitError = null;
+      if (this.ignoreDisplayLimit) {
+        // Re-enable the display limit, it was only confirmed for the
+        // previously selected asset
+        this.ignoreDisplayLimit = false;
+        this.map.removeLayer(this.stacLayer);
+        this.addStacLayer();
+        return;
+      }
+      // The selection may change at the same time, e.g. from children to an asset
+      await this.stacLayer.setDataSources(this.dataSources || null, false);
       await this.stacLayer.setChildren(this.children, this.childrenOptions, false);
       await this.stacLayer.updateLayers();
       this.fit();
@@ -134,37 +171,66 @@ export default {
     }
   },
   created() {
-    // This is created here and not in data() to avoid it being reactive
+    // These are created here and not in data() to avoid them being reactive
     this.stacLayer = null;
+    this.ignoreDisplayLimit = false;
+    this.rejectedDataSources = [];
+    this.focusHintTimer = null;
+    if (this.mapSelection) {
+      this.$watch(() => this.mapSelection.getRevealed(), revealed => this.reveal(revealed?.ref));
+    }
   },
   async mounted() {
+    // Explain that the map must be focused before it reacts to scroll zoom and touch panning
+    this.$refs.map.addEventListener('wheel', this.onGatedInteraction, { passive: true });
+    this.$refs.map.addEventListener('touchmove', this.onGatedInteraction, { passive: true });
+    this.$refs.map.addEventListener('focusin', this.hideFocusHint);
     await this.showStacLayer();
+  },
+  beforeUnmount() {
+    clearTimeout(this.focusHintTimer);
   },
   methods: {
     async showStacLayer() {
       this.map = null;
       this.stacLayer = null;
+      this.displayLimitError = null;
+      this.ignoreDisplayLimit = false;
 
-      await this.createMap(this.$refs.map, this.stac, this.onfocusOnly);
+      // Only interact with a focused map to avoid trapping page scrolling
+      await this.createMap(this.$refs.map, true);
 
       if (this.stac) {
         this.addStacLayer();
       }
     },
     addStacLayer() {
-      let options = Object.assign({}, this.stacLayerOptions, {
+      const options = Object.assign({}, this.stacLayerOptions, {
         // Don't set the URL here, as it is already set in the STAC object and is read-only.
         // url: this.stac.getAbsoluteUrl(),
         data: this.stac,
         children: this.children,
-        assets: this.assets || null,
+        dataSources: this.dataSources || null,
         displayWebMapLink: true,
         disableMigration: true,
         childrenOptions: this.childrenOptions
       });
+      if (this.ignoreDisplayLimit) {
+        options.maxDisplayPixels = Infinity;
+      }
       this.stacLayer = new StacLayer(options);
-      this.stacLayer.on('error', error => {
-        console.warn(error);
+      this.stacLayer.on('error', event => {
+        if (event.error?.name === 'DisplayLimitError') {
+          // The asset needs to load more data than ol-stac deems safe;
+          // offer to display it anyway (see showAnyway)
+          this.displayLimitError = event.error;
+          if (event.error.asset) {
+            this.rejectedDataSources.push(event.error.asset);
+          }
+        }
+        else {
+          console.warn(event);
+        }
         this.fit();
       });
       this.stacLayer.on('sourceready', this.fit);
@@ -245,6 +311,40 @@ export default {
     resetSelection() {
       this.selection = null;
     },
+    onGatedInteraction() {
+      if (this.$refs.map.contains(document.activeElement)) {
+        return;
+      }
+      this.focusHint = true;
+      clearTimeout(this.focusHintTimer);
+      this.focusHintTimer = setTimeout(() => this.focusHint = false, 2000);
+    },
+    hideFocusHint() {
+      clearTimeout(this.focusHintTimer);
+      this.focusHint = false;
+    },
+    hideRejected() {
+      if (!this.mapSelection) {
+        return;
+      }
+      this.rejectedDataSources.forEach(ref => this.mapSelection.hide(ref));
+      this.rejectedDataSources = [];
+    },
+    reveal(ref) {
+      if (!ref || !this.stacLayer) {
+        return;
+      }
+      this.stacLayer.getLayersArray()
+        .filter(layer => toRaw(layer.get('stac')) === toRaw(ref))
+        .forEach(layer => layer.setVisible(true));
+    },
+    showAnyway() {
+      this.displayLimitError = null;
+      this.ignoreDisplayLimit = true;
+      this.rejectedDataSources = [];
+      this.map.removeLayer(this.stacLayer);
+      this.addStacLayer();
+    },
     getShownData() {
       if (!this.stacLayer) {
         return null;
@@ -264,6 +364,26 @@ export default {
 #stac-browser {
   .map-popover {
     max-width: 400px;
+  }
+
+  .map > .focus-hint {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+
+    &.visible {
+      opacity: 1;
+    }
   }
 
   .popover-target {
