@@ -9,7 +9,7 @@
           <b-tab v-if="collectionSearch" :title="$t('search.tabs.collections')" :id="tabIds.collections">
             <WidgetHook id="view-search-filters-collections-start" />
             <SearchFilter
-              :parent="parent" title="" :value="collectionFilters" type="Collections"
+              :parent="parent" title="" type="Collections"
               @input="setFilters"
             />
             <WidgetHook id="view-search-filters-collections-end" />
@@ -17,7 +17,7 @@
           <b-tab v-if="itemSearch" :title="$t('search.tabs.items')" :id="tabIds.items">
             <WidgetHook id="view-search-filters-items-start" />
             <SearchFilter
-              :parent="parent" title="" :value="itemFilters" type="Global"
+              :parent="parent" title="" type="Global"
               :searchLink="itemSearch"
               @input="setFilters"
             />
@@ -29,20 +29,22 @@
       <b-col class="right">
         <Loading v-if="loading" fill top />
         <ErrorAlert v-else-if="error" :description="error" :id="errorId" />
+        <b-alert v-else-if="data === null && isMissingCollections" variant="secondary" show>{{ $t('search.collectionsRequired') }}</b-alert>
         <b-alert v-else-if="data === null" variant="secondary" show>{{ $t('search.modifyCriteria') }}</b-alert>
         <b-alert v-else-if="results.length === 0 && noFurtherItems" variant="secondary" show>{{ $t('search.noFurtherItemsFound') }}</b-alert>
         <b-alert v-else-if="results.length === 0" variant="warning" show>{{ $t('search.noItemsFound') }}</b-alert>
         <template v-else>
           <WidgetHook id="view-search-results-start" />
           <div id="search-map" v-if="data">
-            <MapView :stac="parent" :children="data" onfocusOnly popover />
+            <MapView :stac="parent" :children="data" popover />
           </div>
           <Catalogs
             v-if="isCollectionSearch" :catalogs="results" collectionsOnly
             :pagination="pagination" :loading="loading" @paginate="loadResults"
             :count="totalCount" :apiFilters="collectionFilters"
+            @click="armCarryOver"
           >
-            <template #catalogFooter="slot">
+            <template #footer="slot">
               <b-button-group v-if="itemSearch || canFilterItems(slot.data)" vertical size="sm">
                 <b-button v-if="itemSearch" variant="outline-primary" :pressed="selectedCollections[slot.data.id]" @click="selectForItemSearch(slot.data)">
                   <b-icon-check-square v-if="selectedCollections[slot.data.id]" />
@@ -50,12 +52,13 @@
                   <span class="ms-2">{{ $t('search.selectForItemSearch') }}</span>
                 </b-button>
                 <StacLink :button="{variant: 'outline-primary', disabled: !canFilterItems(slot.data)}" :data="slot.data" :title="$t('search.filterCollection')" :state="{itemFilterOpen: 1}" />
+                <StacActions :data="slot.data" variant="outline-primary" compact size="sm" />
               </b-button-group>
             </template>
           </Catalogs>
           <Items
             v-else
-            :stac="parent" :items="results" :api="true" :allowFilter="false"
+            :stac="parent" :items="results" :api="true"
             :pagination="pagination" :loading="loading" @paginate="loadResults"
             :count="totalCount" :apiFilters="itemFilters"
           />
@@ -76,12 +79,13 @@
 import Utils from '../utils';
 import { isObject, size } from 'stac-js/src/utils.js';
 import SearchFilter from '../components/SearchFilter.vue';
+import { TYPES } from '../components/ApiCapabilitiesMixin';
 import Loading from '../components/Loading.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import { getDisplayTitle, createSTAC } from '../models/stac';
 import { STAC } from 'stac-js';
 import { defineComponent, defineAsyncComponent } from 'vue';
-import { getErrorCode, getErrorMessage } from '../store/utils';
+import { getErrorCode, getErrorMessage, fetchQueryablesForLink, fetchSortablesForLink } from '../store/utils';
 import { mapGetters, mapState } from "vuex";
 import { BTab, BTabs } from 'bootstrap-vue-next';
 
@@ -96,6 +100,7 @@ export default defineComponent({
     SearchFilter,
     Items: defineAsyncComponent(() => import('../components/Items.vue')),
     MapView: defineAsyncComponent(() => import('../components/MapView.vue')),
+    StacActions: defineAsyncComponent(() => import('../components/StacActions.vue')),
     StacLink: defineAsyncComponent(() => import('../components/StacLink.vue'))
   },
   props: {
@@ -124,7 +129,7 @@ export default defineComponent({
   },
   computed: {
     ...mapState(['catalogUrl', 'catalogTitle', 'searchResultsPerPage', 'stateQueryParameters']),
-    ...mapGetters(['canSearchItems', 'canSearchCollections', 'getStac', 'root', 'collectionLink', 'parentLink', 'fromBrowserPath']),
+    ...mapGetters(['canSearchItems', 'canSearchCollections', 'defaultSort', 'getStac', 'root', 'collectionLink', 'parentLink', 'fromBrowserPath', 'supportsConformance']),
     selectedCollectionCount() {
       return size(this.selectedCollections);
     },
@@ -135,16 +140,16 @@ export default defineComponent({
       return null;
     },
     supportsSearch() {
-      return this.canSearchCollections || this.canSearchItems;
+      return this.collectionSearch || this.itemSearch;
     },
     searchLink() {
       return this.isCollectionSearch ? this.collectionSearch : this.itemSearch;
     },
     collectionSearch() {
-      return this.canSearchCollections && this.parent && this.parent.getApiCollectionsLink();
+      return this.parent && this.canSearchCollections(this.parent) && this.parent.getApiCollectionsLink();
     },
     itemSearch() {
-      return this.canSearchItems && this.parent && this.parent.getSearchLink();
+      return this.parent && this.canSearchItems(this.parent) && this.parent.getSearchLink();
     },
     results() {
       return this.data?.getAll() || [];
@@ -157,6 +162,11 @@ export default defineComponent({
     },
     isCollectionSearch() {
       return this.collectionSearch && this.activeSearch === 'search-collections-tab';
+    },
+    isMissingCollections() {
+      return !this.isCollectionSearch
+        && this.supportsConformance(TYPES.Global.RequireCollections, this.parent)
+        && size(this.$store.state.search.itemFilters.collections) === 0;
     },
     pageDescription() {
       let title = getDisplayTitle([this.collectionLink, this.parentLink, this.root], this.catalogTitle);
@@ -184,7 +194,7 @@ export default defineComponent({
         this.updateFreeText(q, true);
       }
     },
-    activeSearch(tab) {
+    async activeSearch(tab, oldTab) {
       // Reset search results when switching tabs
       this.data = null;
       // Update the search type (collections/items) in the URL
@@ -192,12 +202,30 @@ export default defineComponent({
       if (tabId) {
         this.$store.commit('updateState', {type: 'searchtype', value: tabId[0]});
       }
+      // Switching from collection search to item search carries the collection
+      // search criteria over, gated on the item-search conformance classes.
+      // Only on a real tab change, not the initial assignment.
+      if (oldTab === this.tabIds.collections && tab === this.tabIds.items && this.$store.getters['search/hasCollectionSearchCriteria']) {
+        await this.$store.dispatch('search/carryToItemSearch', {
+          collection: this.parent,
+          fetchQueryables: (stac) => fetchQueryablesForLink(this.$store, stac?.getQueryablesLink?.()),
+          fetchSortables: (stac) => fetchSortablesForLink(this.$store, stac?.getSortablesLink?.()),
+          targetType: 'Global',
+        });
+        this.itemFilters = this.$store.getters['search/requestParams']('Global', this.parent);
+      }
+      // Restore the previous results for this tab, e.g. when the user returns
+      // to the Search page after visiting a result
+      await this.restoreResults();
     },
     searchLink: {
       immediate: true,
-      handler() {
+      async handler() {
         if (this.searchLink) {
           this.showPage();
+          // The search link only becomes available once the parent is loaded,
+          // which may be after the tab has been activated
+          await this.restoreResults();
         }
       }
     }
@@ -220,18 +248,37 @@ export default defineComponent({
       this.showPage();
     }
 
+    // Continue with the persisted search filters, e.g. when the user returns
+    // to the Search page after visiting a result
+    this.collectionFilters = this.$store.getters['search/requestParams']('Collections', this.parent);
+    this.itemFilters = this.$store.getters['search/requestParams']('Global', this.parent);
+
     // We had this initially in a watcher with immediate: true, but this was executed too early.
     // Thus we only apply it once when creating the component and then on any subsequent change.
     this.updateFreeText(this.stateQueryParameters.q);
   },
   methods: {
+    // Arms the carry-over when the user opens a collection from the search
+    // results, so that its item filters continue the collection search.
+    // Applies to any link in the results, e.g. the collection cards and the
+    // "filter collection" buttons.
+    armCarryOver(event) {
+      const isPlainClick = event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+      if (isPlainClick && event.target.closest('a')) {
+        this.$store.commit('search/setCarryOnNextNavigation', true);
+      }
+    },
     updateFreeText(q, force = false) {
       if (Array.isArray(q) && (force || size(q) > 0)) {
-        this.setFilters({ q });
+        // The store is the source of truth for the filter forms; an empty
+        // array explicitly clears the free-text filter.
+        const mutation = this.isCollectionSearch ? 'search/setCollectionFilters' : 'search/setItemFilters';
+        this.$store.commit(mutation, { q });
+        this.setFilters({ ...this.filters, q });
       }
     },
     openItemSearch() {
-      this.itemFilters.collections = Object.keys(this.selectedCollections);
+      this.$store.commit('search/setItemFilters', { collections: Object.keys(this.selectedCollections) });
       this.activeSearch = this.tabIds.items;
       this.selectedCollections = {};
     },
@@ -255,7 +302,8 @@ export default defineComponent({
       this.loading = true;
 
       try {
-        this.link = Utils.addFiltersToLink(link, this.filters, this.searchResultsPerPage);
+        const sort = this.defaultSort(this.isCollectionSearch ? 'Collections' : 'Global', this.parent);
+        this.link = Utils.addFiltersToLink(link, this.filters, this.searchResultsPerPage, sort);
       
         const response = await this.$store.dispatch('request', { link: this.link });
         if (response) {
@@ -271,6 +319,12 @@ export default defineComponent({
           const url = this.link.getAbsoluteUrl();
           const data = createSTAC(response.data, url, this.$store);
           this.data = data;
+          // Remember the shown results so that they can be restored when the
+          // user returns to the Search page
+          this.$store.commit('search/setResultsLink', {
+            type: this.isCollectionSearch ? 'Collections' : 'Global',
+            link
+          });
         }
       } catch (error) {
         this.data = null;
@@ -280,6 +334,18 @@ export default defineComponent({
         this.loading = false;
       }
     },
+    // Restores the previously shown results, e.g. when the user returns to
+    // the Search page after visiting a result
+    async restoreResults() {
+      if (this.data !== null || this.loading || !this.searchLink) {
+        return;
+      }
+      const type = this.activeSearch === this.tabIds.collections ? 'Collections' : 'Global';
+      const savedLink = this.$store.state.search.resultsLinks[type];
+      if (savedLink) {
+        await this.loadResults(savedLink);
+      }
+    },
     async setFilters(filters, reset = false) {
       if (this.isCollectionSearch) {
         this.collectionFilters = filters;
@@ -287,10 +353,11 @@ export default defineComponent({
       else {
         this.itemFilters = filters;
       }
-      if (reset) {
+      if (reset || this.isMissingCollections) {
         this.data = null;
       }
       else if (this.searchLink) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         await this.loadResults(this.searchLink);
       }
     },

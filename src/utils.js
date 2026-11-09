@@ -1,12 +1,10 @@
 import removeMd from 'remove-markdown';
 import { Link } from 'stac-js';
 import { hasText, isObject, size, URI } from 'stac-js/src/utils.js';
-import { geojsonMediaType, imageMediaTypes } from 'stac-js/src/mediatypes.js';
 import { pagination } from "stac-js/src/relationtypes.js";
+import { externalBrowserPathRE } from './router/index.js';
 
 export const commonFileNames = ['catalog', 'collection', 'item'];
-
-export const mapMediaTypes = imageMediaTypes.concat([geojsonMediaType]);
 
 export class BrowserError extends Error {
   constructor(message) {
@@ -21,19 +19,16 @@ export class BrowserError extends Error {
  */
 export default class Utils {
 
-  static isMediaType(type, types, allowEmpty = false) {
-    if (!Array.isArray(types)) {
-      types = [types];
-    }
-    if (allowEmpty && !type) {
-      return true;
-    }
-    else if (typeof type !== 'string') {
-      return false;
-    }
-    else {
-      return types.includes(type.toLowerCase());
-    }
+  static isMidnightUTC(extents) {
+    const boundaries = Array.isArray(extents) ? extents.flat().filter(value => value !== null) : [];
+    return boundaries.length > 0 && boundaries.every(value => {
+      const date = new Date(value);
+      return !Number.isNaN(date.getTime()) &&
+        date.getUTCHours() === 0 &&
+        date.getUTCMinutes() === 0 &&
+        date.getUTCSeconds() === 0 &&
+        date.getUTCMilliseconds() === 0;
+    });
   }
 
   static shortenTitle(fullStr, strLen, separator = '…') {
@@ -50,6 +45,10 @@ export default class Utils {
            fullStr.substr(fullStr.length - backChars);
   }
 
+  static isExternalBrowserPath(path) {
+    return hasText(path) && externalBrowserPathRE.test(path);
+  }
+
   static getLinkWithRel(links, rel) {
     return Array.isArray(links) ? links.find(link => isObject(link) && hasText(link.href) && link.rel === rel) : null;
   }
@@ -59,7 +58,7 @@ export default class Utils {
   }
 
   static removeTrailingSlash(str) {
-    return str.replace(/\/$/, '');
+    return str.replace(/\/+$/, '');
   }
 
   static equalUrl(a, b) {
@@ -73,6 +72,70 @@ export default class Utils {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Checks whether two URLs point to the same resource, ignoring a trailing
+   * slash in the path. Query parameters and fragments are ignored.
+   *
+   * @param {string|URI} a - The first URL
+   * @param {string|URI} b - The second URL
+   * @returns {boolean} `true` if scheme, authority and path (except for a trailing slash) are equal
+   */
+  static samePath(a, b) {
+    if (!a || !b) {
+      return false;
+    }
+    try {
+      const uri1 = URI(a);
+      const uri2 = URI(b);
+      return uri1.scheme().toLowerCase() === uri2.scheme().toLowerCase()
+        && uri1.authority().toLowerCase() === uri2.authority().toLowerCase()
+        && Utils.removeTrailingSlash(uri1.path()) === Utils.removeTrailingSlash(uri2.path());
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns the given URL with the trailing slash of the path added or removed.
+   * Scheme, authority, query and fragment are preserved.
+   *
+   * @param {string} url - The URL to change
+   * @param {boolean} trailingSlash - `true` to add a trailing slash, `false` to remove it
+   * @returns {string} The updated URL
+   */
+  static setTrailingSlash(url, trailingSlash) {
+    try {
+      const uri = URI(url);
+      let path = Utils.removeTrailingSlash(uri.path());
+      if (trailingSlash) {
+        path += '/';
+      }
+      return uri.path(path).toString();
+    } catch {
+      return url;
+    }
+  }
+
+  /**
+   * Restores URL template placeholders such as `{z}/{x}/{y}` that got
+   * percent-encoded, e.g. through URL normalization.
+   * Only placeholders that occur in the original URL are restored.
+   *
+   * @param {string} url - The rewritten URL
+   * @param {string} originalUrl - The original URL containing the placeholders
+   * @returns {string} The rewritten URL with the placeholders restored
+   */
+  static restoreUrlTemplateParams(url, originalUrl) {
+    if (typeof url !== 'string' || typeof originalUrl !== 'string') {
+      return url;
+    }
+    const placeholders = originalUrl.match(/\{[\w-]+\}/g) || [];
+    for (const placeholder of new Set(placeholders)) {
+      url = url.replace(new RegExp(`%7B${placeholder.slice(1, -1)}%7D`, 'gi'), placeholder);
+    }
+    return url;
   }
 
   static summarizeMd(text, maxLength = null) {
@@ -305,19 +368,6 @@ export default class Utils {
     }
     const dir = uri.segmentCoded(-2);
     return dir || auth || href;
-  }
-
-  // Gets the value at path of object.
-  // Drop in replacement for lodash.get
-  static getValueFromObjectUsingPath(object, path) {
-    if (object === null || typeof object !== 'object') {
-      return;
-    }
-    object = object[path[0]];
-    if (typeof object !== 'undefined' && path.length > 1) {
-      return this.getValueFromObjectUsingPath(object, path.slice(1));
-    }
-    return object;
   }
 
   static search(searchterm, target, and = true) {

@@ -7,6 +7,124 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+**A vulnerability was found, an upgrade is recommended as fast as possible.**
+
+- XSS issues fixed: Metadata values (e.g. `proj:wkt2`, `grid:code` or `processing:software`) are escaped and links with `javascript:` URLs are not clickable
+
+### Added
+
+- Catalogs that provide web map links (XYZ, TileJSON, PMTiles, WMTS, WMS) show a map
+- New config option `displayPreviewsForChildren` controls preview images on maps showing multiple Items
+- New config option `omitTimeForMidnight` to show date-only Collection temporal extents when all boundaries are midnight UTC
+- SVG icons, thumbnails and previews (`image/svg+xml`) are shown, SVG files are offered for download instead of being opened
+- Item Search: Support for the conformance class that requires the `collections` parameter (`item-search#require-collections`)
+- Links with the relation type `source_for` open in STAC Browser
+- Filters: Sortables and queryables without a title show translated labels for common fields (e.g. `properties.datetime`)
+- Multiple assets can be shown on the map at once (up to 8), the most recently added asset is shown on top
+- Assets that are shown on the map can be hidden again
+- Web map links (XYZ, TileJSON, PMTiles, WMTS, WMS) can be shown on and hidden from the map through the list of links
+- Layer switcher: Assets and web map links can be moved up and down and removed from the map
+
+### Changed
+
+- Layer switcher: The layers that are rendered on top are listed first
+- Confirming to show a large asset on the map applies to all assets of the page instead of only to the selected asset
+- Filters: The "Default" sort option shows the configured default sort (e.g. "Default (Time of Data, Descending)") instead of pre-selecting it
+- Docker: The image is based on `nginx/nginx-unprivileged:1-alpine-slim`, as `nginxinc/nginx-unprivileged` is archived. The image no longer includes the optional nginx modules.
+
+### Fixed
+
+- Item filters from the global search that a collection doesn't support (e.g. item IDs or free text) are no longer sent with its item filter or reported as unapplied changes
+- The filter button no longer reports unapplied changes for the configured default sort order
+- Icons, logos and card thumbnails that fail to load are hidden
+- A page that is still loading no longer replaces the page that was navigated to in the meantime
+- "Search" on external content opens the search of the catalog instead of an error page
+- The catalog keeps its capabilities (e.g. search, sorting, filters) after visiting external content
+- Maps showing multiple Items now send the configured authentication (headers and query parameters) and apply the source/layer customizations and `maxDisplayPixels` for each Item
+- The `crossOriginMedia` option now applies to images on maps
+- The fallback description in the structured data (JSON-LD) shows the catalog title instead of "undefined"
+- Scientific publications without a DOI show "n/a" instead of escaped HTML, and DOI links use HTTPS
+- Zarr datacubes are visualized based on the metadata of their bands (e.g. RGB data without statistics is no longer shown in white) and apply nodata values
+- Maps show the attribution of assets (GeoTIFF, Zarr, GeoJSON, previews) and of their item or collection (attribution extension)
+- Typo in the label for processing instructions/code links
+- Catalogs, collections and items of a configured catalog in folders that share their name with a page of STAC Browser
+  (e.g. `validation/` or `external/`) open correctly, their paths start with `/browse/`
+
+## [5.1.0] - 2026-09-07
+
+### Added
+
+- A "Back" button on pages with external content returns to the page in the catalog from which the external content was reached
+- The source popover indicates when the shown data is not part of the configured catalog
+- Widget `ExternalWarning`: Shows an information on the page of a catalog, collection or item that is not part of the configured catalog
+
+### Changed
+
+- Show favorite button in the search cards by default
+- Maps don't trap page scrolling: scroll-wheel zoom and one-finger panning require a click/tap on the map first, indicated by a hint and a highlight
+
+### Fixed
+
+- The Docker entrypoint and Vite config now support both forms of the JSON Schema `type` keyword (a string or an array of strings), fixing a `jq` error when setting `SB_footerLinks` via environment variables
+- Tile URL templates keep their variables intact instead of percent-encoding them
+- `apiCatalogPriority: "childs"` doesn't hide collection items in the sidebar anymore
+- The conformance classes of the configured catalog are no longer applied to external content,
+  e.g. sorting and filtering are no longer offered for (and sent to) external APIs that may not support them
+- The map renders very small footprints instead of staying empty
+- Maps can be panned and zoomed with the keyboard after focusing them
+
+## [5.1.0-rc.1] - 2026-08-15
+
+### Added
+
+- Search filters are now preserved for collection and item searches
+- Opening a collection from the collection search results carries the search criteria over into its item filters
+- An indicator on the item filter toggle shows when the filters were changed but not applied yet
+- Added basic support for the STAC API extensions Transactions (for Items) and Collection Transactions, including validation
+  - Adds three new config options: `transactions`, `transactionsRequireLogin` and `transactionsRequirePreflight`
+  - Support for external management UIs via `create-form` and `edit-form` links ([RFC 6861](https://www.rfc-editor.org/rfc/rfc6861.html)) in the "Manage" menu
+- Completed authentication support for all supported methods, loading the data with the respective credentials:
+  - Thumbnails, icons and logos
+  - Map data
+  - External viewer actions are hidden when the data requires header-based credentials that external services can't receive
+- AVIF support for thumbnails
+- Improved metadata rendering for Zarr, Archive, Vector and more extensions
+- STAC Actions: A new pluggable interface (`StacActionPlugin`) to add action buttons for catalogs, collections and items, configurable via `stacActions.config.js`. Ships with an optional (disabled by default) `StacMap` action to open items in [stac-map](https://developmentseed.org/stac-map/).
+- Favorites: Catalogs, collections and items can be marked as favorites and revisited on a new Favorites page ([#630](https://github.com/radiantearth/stac-browser/issues/630))
+  - Favorites are stored locally in the browser and can be exported and imported as JSON, CSV, or STAC Catalog
+  - Adds a new config option `showFavorites` to disable the functionality
+- Items can be shown in a list view in addition to the card view, with the same view toggle buttons as for catalogs and collections
+- Search Example Code is now also available for curl and Go
+- The map can display more Zarr datasets
+- New config option `getStacLayerOptions` to customize the options of the individual map layers created for STAC assets and links, e.g. to style GeoTIFF/GeoZarr layers
+
+### Changed
+
+- The `cardViewMode` config option now applies to item lists as well
+- Protection against map visualizations that load so much data that they could slow down or freeze the browser:
+  - Datasets without sufficiently small overviews are not shown on the map automatically
+  - Selecting such an asset through "Show on map" asks for confirmation before displaying it
+  - Adds a new config option `maxDisplayPixels` to adjust the limit, which can also be set through the root catalog
+
+### Removed
+
+- `multihashes` dependency not required anymore for checksum migration
+- `pl`, `sentinel`, and `xarray` extensions
+
+### Fixed
+
+- The Search page restores the previous results when returning to it
+- Temporal extents were incomplete in non-English languages
+- Don't show inline sort and filter options in Collection Search
+- Preserve sort in Collection Search
+- Show error message when search is not actually available although conformance classes are listed
+- The `IN` operator for temporal filters shows a list of datepicker inputs instead of a free-text input
+- Timestamps in `IN` filters are serialized as CQL2 temporal literals instead of plain strings
+
+## [5.0.0] - 2026-07-31
+
 ### Added
 
 - New Widget: `Featured`
@@ -19,13 +137,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed SCSS variable `$logo-image-height` to `$logo-height` and CSS variable `--sb-logo-max-height` to `--sb-logo-height`
 - Added SCSS variable `$header-background` to allow overriding the gradient background of the header via SCSS as well
+- `buildTileUrlTemplate` can return `null` to not pass an asset to the tile server and use client-side rendering or no rendering at all
 
 ### Fixed
 
+- URLs that were entered with a "wrong" trailing slash (e.g. `.../v1` although the server reports `.../v1/` as its URL) are corrected based on the self link of the server response and redirected.
 - Widgets that provide a custom `component` without an `id` render correctly; widget definitions with neither are skipped with an error
 - Use the Bootstrap z-index values to avoid overlay issues with the sticky header
 - Fix logo size calculation, avoiding the site title wrapping into multiple lines
 - Share button correctly shows with rounded borders on the right side
+- Web-Optimized GeoZarr assets have "Show on Map" button
+- The item filter panel reacts to programmatic open/close after the page has loaded
 
 ## [5.0.0-rc.2] - 2026-06-23
 
@@ -58,7 +180,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [5.0.0-rc.1] - 2026-06-27
 
 ### Added
-
 - Adding `extent`s to the root catalog will restrict the Search filters
 - Support free-text search for Collections in list of collections
 - Add a link to Collection Search from the Collections overview page for advanced filters
@@ -230,7 +351,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 For releases prior to v4.0.0, please refer to the
 [release notes in the GitHub Releases](https://github.com/radiantearth/stac-browser/releases).
 
-[Unreleased]: https://github.com/radiantearth/stac-browser/compare/v5.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/radiantearth/stac-browser/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/radiantearth/stac-browser/compare/v5.1.0-rc.1...v5.1.0
+[5.1.0-rc.1]: https://github.com/radiantearth/stac-browser/compare/v5.0.0...v5.1.0-rc.1
+[5.0.0]: https://github.com/radiantearth/stac-browser/compare/v5.0.0-rc.2...v5.0.0
 [5.0.0-rc.2]: https://github.com/radiantearth/stac-browser/compare/v5.0.0-rc.1...v5.0.0-rc.2
 [5.0.0-rc.1]: https://github.com/radiantearth/stac-browser/compare/v5.0.0-beta.1...v5.0.0-rc.1
 [5.0.0-beta.1]: https://github.com/radiantearth/stac-browser/compare/v4.0.1...v5.0.0-beta.1
