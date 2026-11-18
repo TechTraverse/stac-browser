@@ -1,6 +1,6 @@
 export default {
   catalogUrl: null,
-  catalogTitle: "NCCF Product CatalogSTAC Browser",
+  catalogTitle: "NCCF Product Catalog",
   catalogTitleAfterImage: null,
   catalogImage: null,
   allowExternalAccess: true, // Must be true if catalogUrl is not given
