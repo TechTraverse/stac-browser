@@ -36,6 +36,7 @@ certain _OGC API - Records_ and _OGC API - Features_ compliant servers.
   - [Custom extensions](#custom-extensions)
 - [Docker](#docker)
 - [Testing](#testing)
+  - [Testing the NCCF image against an external API](#testing-the-nccf-image-against-an-external-api)
 - [Contributing](#contributing)
 - [Sponsors](#sponsors)
 
@@ -253,6 +254,83 @@ npm test
 ```
 
 For more information on testing, see [CONTRIBUTING.md](CONTRIBUTING.md#tests)
+
+### Testing the NCCF image against an external API
+
+`.github/workflows/publish-nccf-docker.yml` builds the deployed image with
+`pathPrefix=/stac/browser/`, `historyMode=history` and `DYNAMIC_CONFIG=true`.
+Reproduce that image locally with the same build arguments:
+
+```bash
+docker build \
+  --build-arg pathPrefix=/stac/browser/ \
+  --build-arg historyMode=history \
+  --build-arg DYNAMIC_CONFIG=true \
+  -t nccf-sb:test .
+```
+
+Because `DYNAMIC_CONFIG=true`, the catalog URL and path prefix are read when the
+container starts rather than baked into the bundle, so one image can be pointed at
+any STAC API. Pass the API as `SB_catalogUrl`:
+
+```bash
+docker run --rm -p 18080:8080 \
+  -e SB_catalogUrl=https://your-nccf-stac-api/stac/api \
+  nccf-sb:test
+```
+
+Then open <http://localhost:18080/stac/browser/>.
+
+Two things that look like failures but are not:
+
+- `/` returns **404**. The app is mounted at the path prefix, so always include
+  `/stac/browser/`.
+- `10-listen-on-ipv6-by-default.sh: info: /etc/nginx/conf.d/default.conf is not a
+  file or does not exist` on startup is expected. The Dockerfile deletes that file
+  so a skipped entrypoint fails loudly; `40-stac-browser-entrypoint.sh` renders the
+  real config a moment later.
+
+Choose a host port you know is free. If something else already holds the port, the
+page simply never loads instead of reporting an error — check with
+`lsof -nP -iTCP:<port> -sTCP:LISTEN`.
+
+Every option in `config.schema.json` can be overridden the same way, which is
+useful for checking a deployment variant without rebuilding:
+
+```bash
+docker run --rm -p 18080:8080 \
+  -e SB_catalogUrl=https://your-nccf-stac-api/stac/api \
+  -e SB_catalogTitle='NCCF Product Catalog (staging)' \
+  -e SB_pathPrefix=/ \
+  nccf-sb:test
+```
+
+To verify what the entrypoint produced, read it back from the running container:
+
+```bash
+curl -s http://localhost:18080/stac/browser/runtime-config.js
+```
+
+For iterating on the code rather than the image, the dev server reads the same
+`config.js`. It defaults to port 8080, so override it if that port is taken:
+
+```bash
+npm install
+npm run start -- --port 18080
+```
+
+The upstream suites also cover the container itself:
+
+```bash
+npm run test:docker
+npm test
+```
+
+`npm run test:docker` builds the image and asserts the generated runtime config,
+the rendered nginx config and the `<base href>` rewrite. `npm test` runs the
+integration and Playwright end-to-end suites against mocked STAC APIs; those mocks
+are registered inside the browser by Mock Service Worker, so they are not reachable
+from a container.
 
 ## Contributing
 
