@@ -2,13 +2,13 @@
 // .site row) and blue footer. Components live in nccf/components and are
 // injected via widgets.config.js.
 
-// Paint a band edge to edge without widening the page: the box-shadow covers
-// the viewport sides, clip-path keeps it from spilling above/below. Unlike
-// 100vw tricks this never causes horizontal scrolling (scrollbar width).
+// Paint a band edge to edge without widening the page: a filled border-image
+// with a horizontal outset. Outsets are ink overflow, so unlike 100vw tricks
+// they never cause horizontal scrolling, and unlike clip-path they don't clip
+// children such as the header's language dropdown.
 @mixin nccf-full-bleed($color) {
   background: $color;
-  box-shadow: 0 0 0 100vmax $color;
-  clip-path: inset(0 -100vmax);
+  border-image: linear-gradient($color, $color) fill 0 / / 0 100vmax;
 }
 
 @mixin nccf-focus-on-blue {
