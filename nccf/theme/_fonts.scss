@@ -1,0 +1,19 @@
+// Bundled NESDIS web fonts (latin subset, SIL OFL 1.1 — see ../fonts/OFL-*.txt).
+// Served from the app itself so no third-party font CDN is contacted.
+
+@mixin nccf-font-face($family, $file, $weight, $style: normal) {
+  @font-face {
+    font-family: $family;
+    src: url("../fonts/#{$file}.woff2") format("woff2");
+    font-weight: $weight;
+    font-style: $style;
+    font-display: swap;
+  }
+}
+
+@include nccf-font-face("Open Sans", "open-sans-latin-400-normal", 400);
+@include nccf-font-face("Open Sans", "open-sans-latin-400-italic", 400, italic);
+@include nccf-font-face("Open Sans", "open-sans-latin-600-normal", 600);
+@include nccf-font-face("Open Sans", "open-sans-latin-700-normal", 700);
+@include nccf-font-face("Source Sans 3", "source-sans-3-latin-400-normal", 400);
+@include nccf-font-face("Source Sans 3", "source-sans-3-latin-700-normal", 700);
