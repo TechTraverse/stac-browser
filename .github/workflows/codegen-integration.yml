@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - v6
+      - nccf-stac-browser
     paths:
       - 'src/codegen/**'
       - 'tests/integration/**'

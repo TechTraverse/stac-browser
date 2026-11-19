@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - v6
+      - nccf-stac-browser
   pull_request:
     branches:
       - main
       - v6
+      - nccf-stac-browser
   workflow_dispatch:
 
 jobs:
