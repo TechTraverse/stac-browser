@@ -12,10 +12,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 container_id=""
+invalid_container_id=""
 cleanup() {
-  if [[ -n "$container_id" ]]; then
-    docker rm --force "$container_id" > /dev/null 2>&1 || true
-  fi
+  local id
+  for id in "$container_id" "$invalid_container_id"; do
+    if [[ -n "$id" ]]; then
+      docker rm --force "$id" > /dev/null 2>&1 || true
+    fi
+  done
 }
 trap cleanup EXIT
 
@@ -27,11 +31,17 @@ echo "── Testing runtime configuration ──"
 allowed_domains="example.com,quote's.test,back\\slash.test"
 catalog_title=$'Earth\'s \\ catalog\nSecond line'
 path_prefix="/browser/"
+footer_links='[{"label":"Docs","url":"https://example.com/docs"}]'
 container_id="$(
   docker run --detach --rm \
     --env "SB_allowedDomains=$allowed_domains" \
     --env "SB_catalogTitle=$catalog_title" \
     --env "SB_pathPrefix=$path_prefix" \
+    --env "SB_footerLinks=$footer_links" \
+    --env "SB_allowExternalAccess=1" \
+    --env "SB_showFavorites=No" \
+    --env "SB_displayPreview=Y" \
+    --env "SB_preferredAssets=data" \
     "$DOCKER_IMAGE"
 )"
 
@@ -66,6 +76,14 @@ assert.equal(
   "Earth's \\ catalog\nSecond line",
 );
 assert.equal(window.STAC_BROWSER_CONFIG.pathPrefix, process.env.PATH_PREFIX);
+assert.deepEqual(window.STAC_BROWSER_CONFIG.footerLinks, [
+  { label: "Docs", url: "https://example.com/docs" },
+]);
+assert.equal(window.STAC_BROWSER_CONFIG.allowExternalAccess, true);
+assert.equal(window.STAC_BROWSER_CONFIG.showFavorites, false);
+assert.equal(window.STAC_BROWSER_CONFIG.displayPreview, true);
+// ["boolean", "string"]: a non-boolean value is kept as a string
+assert.equal(window.STAC_BROWSER_CONFIG.preferredAssets, "data");
 NODE
 
 nginx_conf="$(docker exec "$container_id" cat /etc/nginx/conf.d/default.conf)"
@@ -91,3 +109,39 @@ if [[ "$base_href" != "$path_prefix" ]]; then
 fi
 
 echo "✓ Runtime configuration passed"
+
+echo "── Testing invalid boolean configuration ──"
+# An unrecognised boolean must stop the container instead of serving a
+# truncated (syntactically invalid) runtime-config.js.
+invalid_container_id="$(
+  docker run --detach \
+    --env "SB_allowExternalAccess=maybe" \
+    "$DOCKER_IMAGE"
+)"
+
+running="true"
+for _ in $(seq 1 100); do
+  running="$(docker inspect --format '{{.State.Running}}' "$invalid_container_id")"
+  [[ "$running" == "false" ]] && break
+  sleep 0.1
+done
+if [[ "$running" != "false" ]]; then
+  echo "Container with an invalid boolean is still running; expected it to exit" >&2
+  docker exec "$invalid_container_id" cat /usr/share/nginx/html/runtime-config.js >&2 || true
+  exit 1
+fi
+
+exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$invalid_container_id")"
+if [[ "$exit_code" == "0" ]]; then
+  echo "Container with an invalid boolean exited with status 0; expected non-zero" >&2
+  exit 1
+fi
+
+invalid_logs="$(docker logs "$invalid_container_id" 2>&1)"
+if [[ "$invalid_logs" != *'SB_allowExternalAccess has unknown boolean value "maybe"'* ]]; then
+  echo "Expected an error about SB_allowExternalAccess in the container logs:" >&2
+  echo "$invalid_logs" >&2
+  exit 1
+fi
+
+echo "✓ Invalid boolean configuration passed"

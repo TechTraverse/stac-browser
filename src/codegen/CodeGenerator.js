@@ -24,11 +24,23 @@ export default class CodeGenerator {
   }
 
   /**
-   * The syntax highlighter language identifier.
+   * The stable identifier of the generator.
+   * Used as the tab id, the key in the browser storage, the i18n key for the
+   * label (`programming.<language>`).
    * @returns {string}
    */
   get language() {
     throw new Error('Subclasses must implement language');
+  }
+
+  /**
+   * Loads the grammar for the syntax highlighter (shiki).
+   * Return a static `import()`, e.g. `import('@shikijs/langs/python')`,
+   * so that only the grammars of the included generators are bundled.
+   * @returns {Promise|null} The grammar module, or `null` for no highlighting.
+   */
+  loadHighlightLanguage() {
+    return null;
   }
 
   /**
@@ -49,6 +61,18 @@ export default class CodeGenerator {
 
   get installDependencies() {
     return null;
+  }
+
+  /**
+   * Render the request body for embedding in the template.
+   * By default emits a formatted JSON string, embedded verbatim in the
+   * language's string literal. Languages that inject the body as a native
+   * literal instead (e.g. Go composite literals) override this.
+   * @param {Object} body
+   * @returns {string}
+   */
+  renderBody(body) {
+    return JSON.stringify(body, null, this.indent);
   }
 
   get method() {
@@ -136,7 +160,7 @@ export default class CodeGenerator {
     let requestUrl, requestBody;
     if (isPost) {
       requestUrl = this.searchUrl;
-      requestBody = JSON.stringify(preparedLink?.body ?? {}, null, this.indent);
+      requestBody = this.renderBody(preparedLink?.body ?? {});
     }
     else {
       requestUrl = preparedLink?.href ?? this.searchUrl;

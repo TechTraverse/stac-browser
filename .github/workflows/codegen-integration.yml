@@ -2,7 +2,10 @@ name: Integration Tests — Code Generators
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - v6
+      - nccf-stac-browser
     paths:
       - 'src/codegen/**'
       - 'tests/integration/**'
@@ -17,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [python, javascript, r, csharp, java, rust]
+        language: [python, javascript, r, csharp, java, rust, curl, go]
 
     steps:
       - uses: actions/checkout@v6

@@ -1,42 +1,44 @@
-# STAC Browser
+# STAC Browser <!-- omit in toc -->
 
 This is a full-fledged [Spatio-Temporal Asset Catalog (STAC)](https://github.com/radiantearth/stac-spec) browser for STAC APIs and static STAC catalogs.
 
-Version: **5.0.0-rc.2** (supports all STAC versions between 0.6.0 and 1.1.0)
+- Latest stable version: ![GitHub Release](https://img.shields.io/github/v/release/radiantearth/stac-browser)
+- Current development version: ![GitHub package.json version (branch)](https://img.shields.io/github/package-json/v/radiantearth/stac-browser/main)
 
-This package has also been published to npm as [`@radiantearth/stac-browser`](https://www.npmjs.com/package/@radiantearth/stac-browser).
+STAC Browser supports all STAC versions between 0.6.0 and 1.1.0.
 
 It's not officially supported, but you may also be able to use it for
 certain _OGC API - Records_ and _OGC API - Features_ compliant servers.
 
-**Please note that STAC Browser is currently with limited funding for both maintenance, bug fixes and improvements. This means issues and PRs may be addressed very slowly.
-If you care about STAC Browser and have some funds to support the future of STAC Browser, please contact <mail@moregeo.it>.**
+> [!IMPORTANT]  
+> Please note that STAC Browser has limited funding for both maintenance, bug fixes and improvements.
+> If you care about STAC Browser and have some funds to support the future of STAC Browser, please contact <mail@moregeo.it>.
 
-**Table of Contents:**
+## Table of Contents <!-- omit in toc -->
 
-- [STAC Browser](#stac-browser)
-  - [Examples](#examples)
-  - [Get Started](#get-started)
-    - [Private query parameters](#private-query-parameters)
-    - [Versions](#versions)
-    - [Migrate from old versions](#migrate-from-old-versions)
-  - [Customize](#customize)
-    - [Options](#options)
-    - [Languages](#languages)
-    - [Themes](#themes)
-    - [Basemaps](#basemaps)
-    - [Actions](#actions)
-    - [Code Generators](#code-generators)
-    - [Additional metadata fields](#additional-metadata-fields)
-      - [Example](#example)
-    - [Widgets](#widgets)
-    - [Metadata fields](#metadata-fields)
-    - [Customization through root catalog](#customization-through-root-catalog)
-    - [Custom extensions](#custom-extensions)
-  - [Docker](#docker)
-  - [Testing](#testing)
-  - [Contributing](#contributing)
-  - [Sponsors](#sponsors)
+- [Examples](#examples)
+- [Get Started](#get-started)
+  - [Private query parameters](#private-query-parameters)
+  - [Versions](#versions)
+  - [Migrate from old versions](#migrate-from-old-versions)
+- [Customize](#customize)
+  - [Options](#options)
+  - [Languages](#languages)
+  - [Themes](#themes)
+  - [Basemaps](#basemaps)
+  - [Actions](#actions)
+  - [Code Generators](#code-generators)
+  - [Additional metadata fields](#additional-metadata-fields)
+    - [Example](#example)
+  - [Widgets](#widgets)
+  - [Metadata fields](#metadata-fields)
+  - [Customization through root catalog](#customization-through-root-catalog)
+  - [Custom extensions](#custom-extensions)
+- [Docker](#docker)
+- [Testing](#testing)
+  - [Testing the NCCF image against an external API](#testing-the-nccf-image-against-an-external-api)
+- [Contributing](#contributing)
+- [Sponsors](#sponsors)
 
 ## Examples
 
@@ -115,8 +117,10 @@ The following table shows the major differences between versions and the upcomin
 | --------- | ------- |
 | 3.3.x     | The last version that uses Leaflet as mapping library. |
 | 4.0.x     | Uses OpenLayers as mapping library. The last version based on VueJS 2, vue-cli and Bootstrap 4. |
-| **5.x.x** | The upcoming version based on VueJS 3, Vite and Bootstrap 5. Target: Q1 2026 |
-| 6.x.x     | Planned version with a new layout, a pluggable interface, and better integration into existing sites. Target: Q4 2026 |
+| 5.0.x     | This version upgraded to VueJS 3, Vite and Bootstrap 5. |
+| 5.1.x     | Adds basic support for the STAC API Transactions extensions and preserves search filters. |
+| 5.2.x     | Multiple assets/web maps mappable, web maps in catalogs, SVG support, new config options and (security) fixes. |
+| 6.x.x     | Planned version with a new layout, a pluggable interface, and better integration into existing sites. Target: 2027 |
 
 For more details on our plans, please check our
 [milestones](https://github.com/radiantearth/stac-browser/milestones).
@@ -218,6 +222,8 @@ You need to provide a field `stac_browser` and then you can set any of the follo
 - `defaultItemSort`
 - `defaultThumbnailSize`
 - `displayGeoTiffByDefault`
+- `maxDisplayPixels`
+- `omitTimeForMidnight`
 - `preferredAssets`
 - `showThumbnailsAsAssets`
 
@@ -249,6 +255,87 @@ npm test
 
 For more information on testing, see [CONTRIBUTING.md](CONTRIBUTING.md#tests)
 
+### Testing the NCCF image against an external API
+
+`.github/workflows/publish-nccf-docker.yml` builds the deployed image with
+`pathPrefix=/stac/browser/`, `historyMode=history` and `DYNAMIC_CONFIG=true`.
+Reproduce that image locally with the same build arguments:
+
+```bash
+docker build \
+  --build-arg pathPrefix=/stac/browser/ \
+  --build-arg historyMode=history \
+  --build-arg DYNAMIC_CONFIG=true \
+  -t nccf-sb:test .
+```
+
+Because `DYNAMIC_CONFIG=true`, the catalog URL and path prefix are read when the
+container starts rather than baked into the bundle, so one image can be pointed at
+any STAC API. Pass the API as `SB_catalogUrl`:
+
+```bash
+docker run --rm -p 18080:8080 \
+  -e SB_catalogUrl=https://your-nccf-stac-api/stac/api \
+  nccf-sb:test
+```
+
+Then open <http://localhost:18080/stac/browser/>.
+
+Two things that look like failures but are not:
+
+- `/` returns **404**. The app is mounted at the path prefix, so always include
+  `/stac/browser/`.
+- `10-listen-on-ipv6-by-default.sh: info: /etc/nginx/conf.d/default.conf is not a
+  file or does not exist` on startup is expected. The Dockerfile deletes that file
+  so a skipped entrypoint fails loudly; `40-stac-browser-entrypoint.sh` renders the
+  real config a moment later.
+
+Choose a host port you know is free. If something else already holds the port, the
+page simply never loads instead of reporting an error — check with
+`lsof -nP -iTCP:<port> -sTCP:LISTEN`.
+
+Every option in `config.schema.json` can be overridden the same way, which is
+useful for checking a deployment variant without rebuilding:
+
+```bash
+docker run --rm -p 18080:8080 \
+  -e SB_catalogUrl=https://your-nccf-stac-api/stac/api \
+  -e SB_catalogTitle='NCCF Product Catalog (staging)' \
+  -e SB_pathPrefix=/ \
+  nccf-sb:test
+```
+
+With `SB_pathPrefix=/` the app is served from the root, so open <http://localhost:18080/>
+instead, and `runtime-config.js` is at <http://localhost:18080/runtime-config.js>.
+
+To verify what the entrypoint produced, read it back from the running container
+(default `/stac/browser/` prefix):
+
+```bash
+curl -s http://localhost:18080/stac/browser/runtime-config.js
+```
+
+For iterating on the code rather than the image, the dev server reads the same
+`config.js`. It defaults to port 8080, so override it if that port is taken:
+
+```bash
+npm install
+npm run start -- --port 18080
+```
+
+The upstream suites also cover the container itself:
+
+```bash
+npm run test:docker
+npm test
+```
+
+`npm run test:docker` builds the image and asserts the generated runtime config,
+the rendered nginx config and the `<base href>` rewrite. `npm test` runs the
+integration and Playwright end-to-end suites against mocked STAC APIs; those mocks
+are registered inside the browser by Mock Service Worker, so they are not reachable
+from a container.
+
 ## Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to STAC Browser.
@@ -261,7 +348,8 @@ The following sponsors have provided a substantial amount of funding for STAC Br
 - [Radiant Earth](https://radiant.earth) (base funding for versions 1, 2 and 3)
 - [National Resources Canada](https://natural-resources.canada.ca/home) (multi-language support, maintenance)
 - [moreGeo GmbH](https://moregeo.it) (maintenance)
+- [EOEPCA / ESA](https://eoepca.org) (customization)
 - [Spacebel](https://spacebel.com) (collection search, mapping)
 - [Planet](https://planet.com) (authentication, maintenance)
 - [CloudFerro](https://cloudferro.com) (authentication, alternate asset and storage extension)
-- [Geobeyond](http://www.geobeyond.it/) (mapping)
+- [Geobeyond](https://www.geobeyond.it/) (mapping)

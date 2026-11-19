@@ -1,7 +1,7 @@
 <template>
   <b-card no-body :class="classes" v-visible.400="load" :img-placement="isList ? 'end' : undefined">
     <div class="card-img-wrapper">
-      <b-card-img v-if="hasImage" class="thumbnail" v-bind="thumbnail" lazy />
+      <AuthImage v-if="hasImage" class="thumbnail" v-bind="thumbnail" lazy />
     </div>
     <b-card-body>
       <b-card-title>
@@ -16,7 +16,9 @@
       <b-card-text v-if="temporalExtent" class="datetime"><small v-html="temporalExtent" /></b-card-text>
     </b-card-body>
     <b-card-footer>
-      <slot name="footer" :data="data" />
+      <slot name="footer" :data="data" :source="catalog">
+        <StacActions v-if="data && !hideActions" :data="data" variant="outline-primary" compact size="sm" />
+      </slot>
     </b-card-footer>
   </b-card>
 </template>
@@ -28,20 +30,24 @@ import FileFormatsMixin from './FileFormatsMixin';
 import StacFieldsMixin from './StacFieldsMixin';
 import CardMixin from './CardMixin';
 import StacLink from './StacLink.vue';
+import StacActions from './StacActions.vue';
 import { STAC } from 'stac-js';
 import { formatTemporalExtent } from '@radiantearth/stac-fields/formatters';
-import { BCard, BCardBody, BCardFooter, BCardImg, BCardText, BCardTitle } from 'bootstrap-vue-next';
+import { BCard, BCardBody, BCardFooter, BCardText, BCardTitle } from 'bootstrap-vue-next';
+import AuthImage from './AuthImage.vue';
+import Utils from '../utils';
 
 export default {
   name: 'Catalog',
   components: {
+    AuthImage,
     BCard,
     BCardBody,
     BCardFooter,
-    BCardImg,
     BCardText,
     BCardTitle,
     StacLink,
+    StacActions,
     Keywords: defineAsyncComponent(() => import('./Keywords.vue'))
   },
   mixins: [
@@ -53,10 +59,17 @@ export default {
     catalog: {
       type: Object,
       required: true
+    },
+    // Hides the default StacActions in the footer slot, for embeddings
+    // where showing them would be redundant or confusing (e.g. the parent
+    // collection preview shown alongside an item's own actions).
+    hideActions: {
+      type: Boolean,
+      default: false
     }
   },
   computed: {
-    ...mapState(['showKeywordsInCatalogCards']),
+    ...mapState(['omitTimeForMidnight', 'showKeywordsInCatalogCards']),
     ...mapGetters(['getStac']),
     classes() {
       let classes = ['catalog-card'];
@@ -76,9 +89,11 @@ export default {
     },
     temporalExtent() {
       if (this.data?.isCollection && this.data.extent?.temporal?.interval.length > 0) {
-        let extent = this.data.extent.temporal.interval[0];
+        const extents = this.data.extent.temporal.interval;
+        const extent = extents[0];
         if (Array.isArray(extent) && (typeof extent[0] === 'string' || typeof extent[1] === 'string')) {
-          return this.formatTemporalExtent(this.data.extent.temporal.interval[0], true);
+          const shorten = this.omitTimeForMidnight && Utils.isMidnightUTC(extents);
+          return this.formatTemporalExtent(extent, null, { shorten });
         }
       }
       return null;
