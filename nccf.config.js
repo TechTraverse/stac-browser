@@ -10,5 +10,11 @@
 // by the deployment at container start, which override this file.
 export default {
   catalogTitle: "NCCF Product Catalog",
-  pathPrefix: "/stac/browser/"
+  pathPrefix: "/stac/browser/",
+  // The NOAA theme (see nccf/README.md) is light-only, like nesdis.noaa.gov.
+  enforcedColorMode: "light",
+  // Fork-only option: show the "An official website of the United States
+  // government" banner. Its text vouches for .gov + HTTPS, so set
+  // SB_nccfGovBanner=false on deployments that don't run under a .gov domain.
+  nccfGovBanner: true
 };
