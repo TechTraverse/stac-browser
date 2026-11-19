@@ -54,8 +54,13 @@ counts as off.
 
 ```bash
 node --test 'nccf/tests/*.test.js'
-npx eslint nccf
+npx eslint --max-warnings 0 nccf
+npx remark --frail --quiet --no-stdout nccf/*.md
 ```
+
+CI runs the same three checks on pushes and pull requests to
+`nccf-stac-browser` (`.github/workflows/nccf-checks.yml`, fork-owned, so it
+never conflicts with upstream's `checks.yml`).
 
 The e2e suite (`npm run test:e2e`) checks that the theme doesn't break the app.
 Once upstream's e2e widget config is merged, the e2e builds swap out

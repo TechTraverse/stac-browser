@@ -1,0 +1,26 @@
+# Checks for the fork-owned NCCF code in nccf/ (see nccf/README.md).
+# Kept in its own workflow, not in upstream's checks.yml, so upstream merges
+# don't conflict. Upstream's `npm run lint` only covers src/.
+name: NCCF Checks
+on:
+  push:
+    branches:
+      - nccf-stac-browser
+  pull_request:
+    branches:
+      - nccf-stac-browser
+jobs:
+  nccf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+      - uses: actions/checkout@v6
+      - run: npm ci
+      - name: Unit tests
+        run: node --test 'nccf/tests/*.test.js'
+      - name: Lint code
+        run: npx eslint --max-warnings 0 nccf
+      - name: Lint documentation
+        run: npx remark --frail --quiet --no-stdout nccf/*.md
