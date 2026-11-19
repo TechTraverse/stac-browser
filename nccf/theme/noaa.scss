@@ -147,4 +147,18 @@ h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6 {
   border-color: $nccf-focus-border;
 }
 
+.form-switch .form-check-input:focus {
+  --bs-form-switch-bg: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='#{$nccf-focus-border}'/></svg>"))};
+}
+
+#stac-browser .map:focus-within::after {
+  border-color: $nccf-focus-border;
+}
+
+// The date picker's styles load with the search views, i.e. after this file,
+// so the doubled class outranks its equally specific rule.
+.dp__theme_light.dp__theme_light {
+  --dp-border-color-focus: #{$nccf-focus-border};
+}
+
 @import "chrome";
