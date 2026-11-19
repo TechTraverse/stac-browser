@@ -1,0 +1,148 @@
+// NOAA NESDIS theme for the NCCF STAC Browser (see nccf/README.md).
+//
+// Imported from src/theme/custom.scss, i.e. after Bootstrap and page.scss in
+// StacBrowser.vue's global styles. Sass variables set here come too late to
+// change Bootstrap's compiled CSS, so the theme overrides Bootstrap's and STAC
+// Browser's CSS custom properties and re-declares the few component rules into
+// which Bootstrap compiled the upstream primary colour. Bootstrap's Sass
+// functions (tint-color, shade-color, to-rgb) are in scope here.
+
+@import "fonts";
+
+// NESDIS palette, measured from www.nesdis.noaa.gov
+$nccf-blue: #0A4595;
+$nccf-blue-dark: #072F66;
+$nccf-ink: #1B1B1B;
+$nccf-banner-gray: #F1F1F1;
+
+$nccf-font-body: "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$nccf-font-nav: "Source Sans 3", "Source Sans Pro", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
+
+// Derived the way Bootstrap derives them from $primary
+$nccf-blue-emphasis: shade-color($nccf-blue, 60%);
+$nccf-blue-bg-subtle: tint-color($nccf-blue, 80%);
+$nccf-blue-border-subtle: tint-color($nccf-blue, 60%);
+$nccf-focus-border: tint-color($nccf-blue, 50%);
+$nccf-focus-shadow: 0 0 0 .25rem rgba($nccf-blue, .25);
+
+// Light mode only: NCCF enforces light mode, and leaving dark mode alone keeps
+// upstream's dark theme intact wherever the toggle is still enabled.
+:root:not([data-bs-theme="dark"]),
+[data-bs-theme="light"] {
+  --nccf-blue: #{$nccf-blue};
+  --nccf-blue-dark: #{$nccf-blue-dark};
+  --nccf-banner-gray: #{$nccf-banner-gray};
+  --nccf-font-body: #{inspect($nccf-font-body)};
+  --nccf-font-nav: #{inspect($nccf-font-nav)};
+
+  --bs-primary: #{$nccf-blue};
+  --bs-primary-rgb: #{to-rgb($nccf-blue)};
+  --bs-primary-text-emphasis: #{$nccf-blue-emphasis};
+  --bs-primary-bg-subtle: #{$nccf-blue-bg-subtle};
+  --bs-primary-border-subtle: #{$nccf-blue-border-subtle};
+  --bs-link-color: #{$nccf-blue};
+  --bs-link-color-rgb: #{to-rgb($nccf-blue)};
+  --bs-link-hover-color: #{$nccf-blue-dark};
+  --bs-link-hover-color-rgb: #{to-rgb($nccf-blue-dark)};
+  --bs-body-color: #{$nccf-ink};
+  --bs-body-color-rgb: #{to-rgb($nccf-ink)};
+  --bs-focus-ring-color: #{rgba($nccf-blue, .25)};
+  --bs-font-sans-serif: #{inspect($nccf-font-body)};
+  --bs-body-font-family: #{inspect($nccf-font-body)};
+}
+
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6 {
+  font-family: var(--bs-body-font-family);
+}
+
+.card-title {
+  font-family: var(--nccf-font-nav, inherit);
+  font-weight: 700;
+}
+
+// ── Components with the upstream primary compiled in ──────────────────────
+
+.btn-primary {
+  --bs-btn-bg: #{$nccf-blue};
+  --bs-btn-border-color: #{$nccf-blue};
+  --bs-btn-hover-bg: #{shade-color($nccf-blue, 15%)};
+  --bs-btn-hover-border-color: #{shade-color($nccf-blue, 20%)};
+  --bs-btn-focus-shadow-rgb: #{to-rgb(mix(#fff, $nccf-blue, 15%))};
+  --bs-btn-active-bg: #{shade-color($nccf-blue, 20%)};
+  --bs-btn-active-border-color: #{shade-color($nccf-blue, 25%)};
+  --bs-btn-disabled-bg: #{$nccf-blue};
+  --bs-btn-disabled-border-color: #{$nccf-blue};
+}
+
+.btn-outline-primary {
+  --bs-btn-color: #{$nccf-blue};
+  --bs-btn-border-color: #{$nccf-blue};
+  --bs-btn-hover-bg: #{$nccf-blue};
+  --bs-btn-hover-border-color: #{$nccf-blue};
+  --bs-btn-focus-shadow-rgb: #{to-rgb($nccf-blue)};
+  --bs-btn-active-bg: #{$nccf-blue};
+  --bs-btn-active-border-color: #{$nccf-blue};
+  --bs-btn-disabled-color: #{$nccf-blue};
+  --bs-btn-disabled-border-color: #{$nccf-blue};
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: $nccf-focus-border;
+  box-shadow: $nccf-focus-shadow;
+}
+
+.form-check-input:checked,
+.form-check-input[type="checkbox"]:indeterminate {
+  background-color: $nccf-blue;
+  border-color: $nccf-blue;
+}
+
+.form-range {
+  &::-webkit-slider-thumb { background-color: $nccf-blue; }
+  &::-moz-range-thumb { background-color: $nccf-blue; }
+  &:focus::-webkit-slider-thumb { box-shadow: 0 0 0 1px #fff, $nccf-focus-shadow; }
+  &:focus::-moz-range-thumb { box-shadow: 0 0 0 1px #fff, $nccf-focus-shadow; }
+}
+
+.nav-link:focus-visible {
+  box-shadow: $nccf-focus-shadow;
+}
+
+.dropdown-menu {
+  --bs-dropdown-link-active-bg: #{$nccf-blue};
+}
+
+.nav-pills {
+  --bs-nav-pills-link-active-bg: #{$nccf-blue};
+}
+
+.accordion {
+  --bs-accordion-btn-focus-box-shadow: #{$nccf-focus-shadow};
+  --bs-accordion-btn-active-icon: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='#{$nccf-blue-emphasis}' stroke-linecap='round' stroke-linejoin='round'><path d='m2 5 6 6 6-6'/></svg>"))};
+}
+
+.pagination {
+  --bs-pagination-focus-box-shadow: #{$nccf-focus-shadow};
+  --bs-pagination-active-bg: #{$nccf-blue};
+  --bs-pagination-active-border-color: #{$nccf-blue};
+}
+
+.progress,
+.progress-stacked {
+  --bs-progress-bar-bg: #{$nccf-blue};
+}
+
+.list-group {
+  --bs-list-group-active-bg: #{$nccf-blue};
+  --bs-list-group-active-border-color: #{$nccf-blue};
+}
+
+.btn-close {
+  --bs-btn-close-focus-shadow: #{$nccf-focus-shadow};
+}
+
+#stac-browser .multiselect__tags:focus-within {
+  border-color: $nccf-focus-border;
+}
