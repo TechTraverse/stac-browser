@@ -52,11 +52,14 @@ import AssetActions from '../../assetActions.config';
 import LinkActions from '../../linkActions.config';
 import AuthUtils from './auth/utils';
 import { browserProtocols } from 'stac-js/src/http';
-import { imageMediaTypes, geojsonMediaType, svgMediaType, wozMediaTypes, zarrMediaTypes } from 'stac-js/src/mediatypes';
+import { imageMediaTypes, geojsonMediaType, geotiffMediaTypes, svgMediaType, wozMediaTypes, zarrMediaTypes } from 'stac-js/src/mediatypes';
 import { getGeoZarrSourceOptionsFromAsset, getWebMapLinks } from 'ol-stac/util.js';
 
 const disableDownloadTypes = [...zarrMediaTypes];
 const mapTypes = imageMediaTypes.concat([geojsonMediaType]).concat(wozMediaTypes);
+// The asset types that ol-stac passes to buildTileUrlTemplate (GeoTiff/COG and Zarr),
+// other types are never rendered through the tile server
+const tileServerTypes = geotiffMediaTypes.concat(zarrMediaTypes);
 
 let i = 0;
 
@@ -110,8 +113,15 @@ export default {
     requiresAuth() {
       return !this.isLoggedIn && this.auth.length > 0;
     },
+    // Whether the asset would be passed to the tile server by ol-stac
+    usesTileServer() {
+      return this.isAsset
+        && Boolean(this.buildTileUrlTemplate)
+        && !this.useTileLayerAsFallback
+        && this.data.isType(tileServerTypes);
+    },
     tileRendererType() {
-      if (this.tileUrlTemplate && !this.useTileLayerAsFallback) {
+      if (this.usesTileServer && this.tileUrlTemplate) {
         return 'server';
       }
       else {
@@ -139,7 +149,9 @@ export default {
       if (typeof this.data?.type !== 'string') {
         return false;
       }
-      // If the tile renderer is a tile server, the buildTileUrlTemplate function decides which assets it supports
+      // GeoTiff and Zarr assets are rendered through the tile server if buildTileUrlTemplate
+      // returns a URL for them (if it returns null, the client-side checks below apply).
+      // Other types (e.g. JSON, PDF, NetCDF) never reach the tile server, see usesTileServer.
       else if (this.tileRendererType === 'server') {
         return true;
       }
@@ -293,7 +305,9 @@ export default {
       immediate: true,
       async handler(data) {
         this.tileUrlTemplate = null;
-        if (!this.isAsset || !this.buildTileUrlTemplate) {
+        // Only resolve the URL for assets that the tile server would render,
+        // buildTileUrlTemplate may be expensive (e.g. async with network requests)
+        if (!this.usesTileServer) {
           return;
         }
         try {

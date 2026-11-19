@@ -459,8 +459,8 @@ For async functions (i.e. functions that return a Promise) the "Show on map" but
 may appear with a slight delay, once the Promise has been resolved.
 
 > [!NOTE]  
-> The function is called for every asset that is shown in the user interface, not only for the assets
-> that are actually shown on the map. Avoid heavy work such as network requests in the function,
+> The function is called for every GeoTiff/COG and Zarr asset that is shown in the user interface,
+> not only for the assets that are actually shown on the map. Other asset types are never passed to it. Avoid heavy work such as network requests in the function,
 > otherwise pages with many assets may render slowly.
 
 **Example**:
