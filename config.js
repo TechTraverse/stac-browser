@@ -1,6 +1,6 @@
 export default {
   catalogUrl: null,
-  catalogTitle: "NCCF Product Catalog",
+  catalogTitle: null,
   catalogTitleAfterImage: null,
   catalogImage: null,
   allowExternalAccess: true, // Must be true if catalogUrl is not given
@@ -43,7 +43,7 @@ export default {
   buildTileUrlTemplate: null,
   getMapSourceOptions: null,
   getStacLayerOptions: null,
-  pathPrefix: "/stac/browser/",
+  pathPrefix: "/",
   historyMode: "history",
   cardViewMode: "cards",
   omitTimeForMidnight: false,

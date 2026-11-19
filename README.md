@@ -255,17 +255,41 @@ npm test
 
 For more information on testing, see [CONTRIBUTING.md](CONTRIBUTING.md#tests)
 
+### NCCF configuration
+
+NCCF-specific options live in [`nccf.config.js`](nccf.config.js), not in `config.js`.
+`config.js` is kept identical to upstream so merges from radiantearth/stac-browser
+don't conflict. `nccf.config.js` only lists the options that differ and is layered
+on top of `config.js` via `SB_CONFIG` (see [options](docs/options.md)).
+
+Where a setting belongs:
+
+- **Same for every NCCF deployment** (title, path prefix, branding): `nccf.config.js`.
+- **Different per environment** (catalog URL, a "(staging)" title): `SB_*`
+  environment variables set by the deployment at container start. These override
+  `nccf.config.js`.
+
+To run the dev server with the NCCF configuration:
+
+```bash
+SB_CONFIG=nccf.config.js npm start
+```
+
+or put `SB_CONFIG=nccf.config.js` in a local `.env` file (gitignored). The e2e
+tests always run against the default `config.js`, regardless of `SB_CONFIG`.
+
 ### Testing the NCCF image against an external API
 
 `.github/workflows/publish-nccf-docker.yml` builds the deployed image with
-`pathPrefix=/stac/browser/`, `historyMode=history` and `DYNAMIC_CONFIG=true`.
-Reproduce that image locally with the same build arguments:
+`pathPrefix=/stac/browser/`, `historyMode=history`, `DYNAMIC_CONFIG=true` and
+`SB_CONFIG=nccf.config.js`. Reproduce that image locally with the same build arguments:
 
 ```bash
 docker build \
   --build-arg pathPrefix=/stac/browser/ \
   --build-arg historyMode=history \
   --build-arg DYNAMIC_CONFIG=true \
+  --build-arg SB_CONFIG=nccf.config.js \
   -t nccf-sb:test .
 ```
 
@@ -315,12 +339,12 @@ To verify what the entrypoint produced, read it back from the running container
 curl -s http://localhost:18080/stac/browser/runtime-config.js
 ```
 
-For iterating on the code rather than the image, the dev server reads the same
-`config.js`. It defaults to port 8080, so override it if that port is taken:
+For iterating on the code rather than the image, run the dev server with the same
+configuration. It defaults to port 8080, so override it if that port is taken:
 
 ```bash
 npm install
-npm run start -- --port 18080
+SB_CONFIG=nccf.config.js npm run start -- --port 18080
 ```
 
 The upstream suites also cover the container itself:
