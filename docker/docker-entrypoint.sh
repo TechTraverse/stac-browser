@@ -13,14 +13,15 @@ safe_echo() {
 #  handle boolean
 bool() {
     # $1 = value
-    case "$1" in
-        true | TRUE | yes | t | True)
+    # Accepts true/false, t/f, yes/no, y/n and 1/0, case-insensitively.
+    # Returns non-zero (printing nothing) for any other value.
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        true | t | yes | y | 1)
             printf 'true' ;;
-        false | FALSE | no | n | False)
+        false | f | no | n | 0)
             printf 'false' ;;
         *)
-            printf 'Err: Unknown boolean value "%s"\n' "$1" >&2
-            exit 1 ;;
+            return 1 ;;
     esac
 }
 
@@ -103,8 +104,18 @@ schema_type() {
     printf '%s\n' "$config_schema" | jq -r "$1 | if type == \"array\" then .[0] else . end"
 }
 
-# Iterate over environment variables with "SB_" prefix
-env -0 | tr '\0' '\n' | cut -f1 -d= | grep "^SB_" | {
+# Succeed if a JSON Schema "type" keyword is or includes "string".
+schema_allows_string() {
+    # $1 = jq path expression pointing at the "type" keyword
+    printf '%s\n' "$config_schema" | jq -e "$1 | if type == \"array\" then index(\"string\") != null else . == \"string\" end" > /dev/null
+}
+
+# Iterate over environment variables with "SB_" prefix.
+# The brace group is the last element of the pipeline, so it runs in a subshell
+# and the pipeline's exit status is its exit status: an `exit 1` inside it only
+# ends that subshell. Check the status explicitly so an invalid value never
+# installs a partially written runtime-config.js.
+if ! env -0 | tr '\0' '\n' | cut -f1 -d= | grep "^SB_" | {
     echo "window.STAC_BROWSER_CONFIG = {"
     while IFS='=' read -r name; do
         # Strip the prefix
@@ -123,7 +134,16 @@ env -0 | tr '\0' '\n' | cut -f1 -d= | grep "^SB_" | {
                 safe_echo "$value"
                 ;;
             boolean)
-                bool "$value"
+                if bool "$value"; then
+                    :
+                elif schema_allows_string ".properties.\"$argname\".type"; then
+                    # e.g. preferredAssets: ["boolean", "string"]
+                    safe_echo "$value"
+                else
+                    printf 'Err: %s has unknown boolean value "%s" (expected true/false, yes/no, y/n, t/f or 1/0)\n' \
+                        "$name" "$value" >&2
+                    exit 1
+                fi
                 ;;
             integer | number | object)
                 object "$value"
@@ -138,5 +158,9 @@ env -0 | tr '\0' '\n' | cut -f1 -d= | grep "^SB_" | {
         echo ","
     done
     echo "}"
-} > "$runtime_config_tmp"
+} > "$runtime_config_tmp"; then
+    rm -f "$runtime_config_tmp"
+    echo "Err: failed to generate $runtime_config from SB_* environment variables" >&2
+    exit 1
+fi
 mv -f "$runtime_config_tmp" "$runtime_config"
