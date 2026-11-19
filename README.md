@@ -305,7 +305,11 @@ docker run --rm -p 18080:8080 \
   nccf-sb:test
 ```
 
-To verify what the entrypoint produced, read it back from the running container:
+With `SB_pathPrefix=/` the app is served from the root, so open <http://localhost:18080/>
+instead, and `runtime-config.js` is at <http://localhost:18080/runtime-config.js>.
+
+To verify what the entrypoint produced, read it back from the running container
+(default `/stac/browser/` prefix):
 
 ```bash
 curl -s http://localhost:18080/stac/browser/runtime-config.js
