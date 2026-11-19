@@ -19,6 +19,9 @@
   }
 }
 
+// Header bar tokens. Like the tokens in noaa.scss these apply in both colour
+// modes (data-bs-theme lives on <body>, so the :not() never matches); see the
+// comment there.
 :root:not([data-bs-theme="dark"]),
 [data-bs-theme="light"] {
   --sb-header: var(--nccf-blue);

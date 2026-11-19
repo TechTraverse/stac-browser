@@ -7,7 +7,9 @@ to the fork, so upstream merges from radiantearth/stac-browser never touch it.
 
 Makes the app look like a NOAA NESDIS site (<https://www.nesdis.noaa.gov/>):
 US government banner, NOAA masthead, blue NESDIS nav bar and footer, NESDIS
-colours and fonts. Light mode only.
+colours and fonts. Light mode only: `nccf.config.js` sets
+`enforcedColorMode: "light"`, and the theme has no dark variant (see the
+comment above the tokens in `theme/noaa.scss`).
 
 | Path | Purpose |
 | ---- | ------- |
