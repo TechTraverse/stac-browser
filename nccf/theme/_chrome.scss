@@ -1,0 +1,302 @@
+// NOAA chrome: gov banner, masthead, blue nav bar (STAC Browser's header
+// .site row) and blue footer. Components live in nccf/components and are
+// injected via widgets.config.js.
+
+// Paint a band edge to edge without widening the page: the box-shadow covers
+// the viewport sides, clip-path keeps it from spilling above/below. Unlike
+// 100vw tricks this never causes horizontal scrolling (scrollbar width).
+@mixin nccf-full-bleed($color) {
+  background: $color;
+  box-shadow: 0 0 0 100vmax $color;
+  clip-path: inset(0 -100vmax);
+}
+
+@mixin nccf-focus-on-blue {
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
+
+:root:not([data-bs-theme="dark"]),
+[data-bs-theme="light"] {
+  --sb-header: var(--nccf-blue);
+  --sb-header-background: var(--nccf-blue);
+  --sb-header-color: #fff;
+  --sb-header-hover-color: #fff;
+  --sb-header-font-weight: 700;
+  --sb-header-button-background: transparent;
+  --sb-header-button-border-color: rgba(255, 255, 255, .6);
+  --sb-header-hover-button-border-color: #fff;
+  --sb-header-button-hover-background: rgba(255, 255, 255, .15);
+  --sb-header-button-active-background: rgba(255, 255, 255, .25);
+}
+
+// Banner and masthead sit flush on top of each other and the header,
+// cancelling the container's flex gap below their widget wrappers.
+#stac-browser > .widget:has(> .nccf-gov-banner),
+#stac-browser > .widget:has(> .nccf-masthead) {
+  margin-bottom: calc(-1 * var(--sb-block-gap));
+}
+
+// ── Gov banner ────────────────────────────────────────────────────────────
+
+.nccf-gov-banner {
+  @include nccf-full-bleed(var(--nccf-banner-gray));
+  font-size: .8rem;
+  line-height: 1.4;
+  color: #1b1b1b;
+
+  .nccf-gov-banner-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .5rem;
+    padding: .25rem 0;
+  }
+
+  .nccf-flag {
+    width: 16px;
+    height: 11px;
+    flex: none;
+  }
+
+  .nccf-gov-banner-button {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--nccf-blue);
+    text-decoration: underline;
+    font: inherit;
+
+    &:hover {
+      color: var(--nccf-blue-dark);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--nccf-blue);
+      outline-offset: 2px;
+    }
+  }
+
+  .nccf-chevron {
+    width: .75em;
+    height: .75em;
+    transition: transform .15s ease-in-out;
+
+    &.open {
+      transform: rotate(180deg);
+    }
+  }
+
+  .nccf-gov-banner-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem 2rem;
+    padding: 1rem 0;
+    font-size: .9rem;
+  }
+
+  .nccf-gov-banner-guidance {
+    display: flex;
+    gap: .75rem;
+    align-items: flex-start;
+
+    p {
+      margin: 0;
+    }
+  }
+
+  .nccf-gov-banner-icon {
+    flex: none;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: .5rem;
+    border-radius: 50%;
+    color: var(--nccf-blue);
+    background: #fff;
+  }
+}
+
+// ── Masthead ──────────────────────────────────────────────────────────────
+
+.nccf-masthead {
+  @include nccf-full-bleed(#fff);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+
+  a {
+    color: #1b1b1b;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .nccf-masthead-emblem {
+    flex: none;
+    line-height: 0;
+
+    img {
+      width: 4rem;
+      height: 4rem;
+    }
+  }
+
+  .nccf-masthead-text {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+  }
+
+  .nccf-masthead-name {
+    font-family: var(--nccf-font-nav);
+    font-weight: 700;
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+
+  .nccf-masthead-department {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  @include media-breakpoint-down(md) {
+    padding: .75rem 0;
+
+    .nccf-masthead-emblem img {
+      width: 3rem;
+      height: 3rem;
+    }
+
+    .nccf-masthead-name {
+      font-size: 1.05rem;
+    }
+  }
+}
+
+// ── Blue nav bar (STAC Browser's header .site row) ────────────────────────
+
+#stac-browser > header {
+  > .site {
+    @include nccf-full-bleed(var(--nccf-blue));
+    font-family: var(--nccf-font-nav);
+
+    > .col-md-12 > .title {
+      text-shadow: none;
+
+      a {
+        @include nccf-focus-on-blue;
+      }
+    }
+  }
+
+  .btn-header {
+    --bs-btn-focus-shadow-rgb: 255, 255, 255;
+    font-weight: 600;
+
+    @include nccf-focus-on-blue;
+  }
+}
+
+// ── Footer ────────────────────────────────────────────────────────────────
+
+#stac-browser > footer {
+  @include nccf-full-bleed(var(--nccf-blue));
+  padding-top: 2rem;
+  color: #fff;
+
+  a {
+    color: #fff;
+
+    @include nccf-focus-on-blue;
+  }
+
+  // Upstream's footer links and "Powered by" line use .text-body-secondary
+  // (an !important utility), which is unreadable on blue.
+  .text-body-secondary {
+    color: rgba(255, 255, 255, .85) !important;
+  }
+}
+
+// Scoped under #stac-browser to outrank upstream's `#stac-browser h2` colour.
+#stac-browser > footer .nccf-footer {
+  text-align: start;
+  margin-bottom: 1.5rem;
+  font-family: var(--nccf-font-nav);
+
+  .nccf-footer-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+
+    h2 {
+      font-family: var(--nccf-font-nav);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: .5rem;
+      color: #fff;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: .35rem;
+    }
+
+    a {
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  .nccf-footer-bottom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, .4);
+  }
+
+  .nccf-footer-emblem {
+    flex: none;
+    line-height: 0;
+
+    img {
+      width: 3rem;
+      height: 3rem;
+    }
+  }
+
+  .nccf-footer-federal {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: .875rem;
+
+    li:not(:last-child)::after {
+      content: "|";
+      margin: 0 .5em;
+      opacity: .6;
+    }
+  }
+}
