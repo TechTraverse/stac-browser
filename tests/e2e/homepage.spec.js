@@ -27,8 +27,9 @@ test.describe('STAC Browser Data Source Selection', () => {
     // Check if the page title is visible
     await expect(page.locator('header [role="banner"]')).toBeVisible();
 
-    // Verify the page loads without errors
-    await expect(page).toHaveTitle(/STAC Browser/);
+    // Verify the page loads without errors: the document title is the configured
+    // catalog title, or the default "STAC Browser" if none is configured
+    await expect(page).toHaveTitle(CONFIG.catalogTitle || 'STAC Browser');
     
     // confirm that the STAC index container is present and contains at least one entry
     await page.waitForSelector('.stac-index');

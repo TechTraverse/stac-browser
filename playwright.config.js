@@ -11,6 +11,25 @@ function getEnvWithoutSB() {
   return env;
 }
 
+/* The e2e suite tests app behaviour, not the deployment prefix: the specs
+   navigate to root-relative paths such as `/external/...`. config.js may set a
+   deployment-specific `pathPrefix` (e.g. "/stac/browser/"), so the test web
+   servers always serve the app from the root. Serving under a prefix is
+   exercised by the Docker image tests (tests/docker). */
+const E2E_SERVER_ENV = {
+  STAC_BROWSER_E2E: 'true',
+  SB_pathPrefix: '/',
+};
+
+/* Locally the tests start their own dev server on a dedicated port, so they
+   don't clash with a developer's regular `npm start` server on 8080 (which uses
+   the configured pathPrefix). The server is never reused: an existing server
+   may have been started with a different config (or belong to another test run
+   and stop midway), which would make most tests fail in confusing ways. */
+const LOCAL_PORT = 8090;
+const CI_PORT = 4173; // vite preview default
+const BASE_URL = `http://localhost:${process.env.CI ? CI_PORT : LOCAL_PORT}`;
+
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
@@ -51,9 +70,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.CI 
-      ? 'http://localhost:4173'  // Vite preview server port
-      : 'http://localhost:8080',
+    baseURL: BASE_URL,
     
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -104,17 +121,17 @@ export default defineConfig({
         // In CI: Build and serve the production build.
         // STAC_BROWSER_E2E enables __VUE_PROD_DEVTOOLS__ so tests can introspect
         // the map (see vite.config.js); it does not affect real production builds.
-        command: 'npm run build && npx vite preview --port 4173 --strictPort',
-        env: { ...getEnvWithoutSB(), STAC_BROWSER_E2E: 'true' },
-        url: 'http://localhost:4173',
+        command: `npm run build && npx vite preview --port ${CI_PORT} --strictPort`,
+        env: { ...getEnvWithoutSB(), ...E2E_SERVER_ENV },
+        url: BASE_URL,
         reuseExistingServer: false,
         timeout: 120 * 1000,
       }
     : {
-        command: 'npm start',
-        env: { ...process.env, STAC_BROWSER_E2E: 'true' },
-        url: 'http://localhost:8080',
-        reuseExistingServer: true,
+        command: `npm start -- --port ${LOCAL_PORT} --strictPort`,
+        env: { ...process.env, ...E2E_SERVER_ENV },
+        url: BASE_URL,
+        reuseExistingServer: false,
         timeout: 120 * 1000,
       },
 });
