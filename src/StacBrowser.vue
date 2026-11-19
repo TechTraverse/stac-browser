@@ -251,8 +251,14 @@ export default defineComponent({
       if (!hasText(referer) || !referer.startsWith('/')) {
         return null;
       }
-      const url = URL.parse(referer, window.location.href);
-      if (!url || url.origin !== window.location.origin) {
+      // URL.parse() is not available in Safari < 18 / Chromium < 126
+      let url;
+      try {
+        url = new URL(referer, window.location.href);
+      } catch {
+        return null;
+      }
+      if (url.origin !== window.location.origin) {
         return null;
       }
       if (!this.allowExternalAccessFromVueX && Utils.isExternalBrowserPath(referer)) {
