@@ -1,0 +1,14 @@
+// NCCF-specific configuration, layered on top of the upstream defaults in config.js.
+//
+// Loaded via SB_CONFIG=nccf.config.js (see .github/workflows/publish-nccf-docker.yml
+// and the "NCCF configuration" section of the README). Keeping NCCF settings here
+// rather than in config.js means config.js stays identical to upstream and merges
+// from radiantearth/stac-browser don't conflict.
+//
+// Only list options that differ from config.js. Settings that vary per environment
+// (e.g. catalogUrl, a "(staging)" title) belong in SB_* environment variables set
+// by the deployment at container start, which override this file.
+export default {
+  catalogTitle: "NCCF Product Catalog",
+  pathPrefix: "/stac/browser/"
+};

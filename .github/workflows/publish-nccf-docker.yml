@@ -47,6 +47,7 @@ jobs:
             pathPrefix=/stac/browser/
             historyMode=history
             DYNAMIC_CONFIG=true
+            SB_CONFIG=nccf.config.js
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.SHORT_SHA }}
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.OWNER_LOWER }}/${{ env.IMAGE_NAME }}:latest

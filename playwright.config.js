@@ -19,6 +19,9 @@ function getEnvWithoutSB() {
 const E2E_SERVER_ENV = {
   STAC_BROWSER_E2E: 'true',
   SB_pathPrefix: '/',
+  // Test against the default config.js even if a deployment config such as
+  // nccf.config.js is enabled via SB_CONFIG (e.g. in a local .env file).
+  SB_CONFIG: '',
 };
 
 /* Locally the tests start their own dev server on a dedicated port, so they
